@@ -1,0 +1,150 @@
+/* EcoSort - polished, readable UI theme */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+#MainMenu {
+  visibility: hidden;
+}
+footer {
+  visibility: hidden;
+}
+.stDeployButton {
+  display: none;
+}
+
+.stApp {
+  background: linear-gradient(135deg, #f7fcf8 0%, #eef8f0 100%);
+  color: #102a1f;
+}
+
+[data-testid="stAppViewContainer"] {
+  background: transparent;
+}
+
+.block-container {
+  padding-top: 2rem;
+  padding-bottom: 3rem;
+}
+
+.pro-card {
+  background: #ffffff;
+  border: 1px solid #dceee2;
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 10px 30px rgba(16, 42, 31, 0.06);
+}
+
+.pro-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 32px rgba(16, 42, 31, 0.09);
+}
+
+.metric-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #4b6b56;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.metric-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #103b27;
+  margin-bottom: 4px;
+}
+
+.metric-subtitle {
+  font-size: 0.9rem;
+  color: #5f7868;
+}
+
+.hero-banner {
+  background: linear-gradient(120deg, #126b44 0%, #1f9b62 100%);
+  border-radius: 20px;
+  padding: 34px 28px;
+  margin-bottom: 24px;
+  color: #ffffff;
+  box-shadow: 0 18px 36px rgba(18, 107, 68, 0.18);
+}
+
+.hero-banner h1 {
+  margin-bottom: 8px !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  font-size: 2.25rem;
+}
+
+.hero-banner p {
+  color: #e8f9ee !important;
+}
+
+.status-pill {
+  display: inline-block;
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #f7fff9;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+div[data-testid="stMarkdownContainer"] h1,
+div[data-testid="stMarkdownContainer"] h2,
+div[data-testid="stMarkdownContainer"] h3 {
+  color: #103b27;
+  font-weight: 700;
+}
+
+.history-item {
+  background: #ffffff;
+  border: 1px solid #dceee2;
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: 0 8px 20px rgba(16, 42, 31, 0.05);
+}
+
+.history-title {
+  color: #103b27;
+  font-weight: 600;
+}
+
+.history-time {
+  color: #5f7868;
+  font-size: 0.8rem;
+}
+
+.history-tags {
+  color: #2b8a5d;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chat-bubble-user {
+  background: #eaf8ef;
+  color: #214836;
+  border-radius: 16px 16px 0 16px;
+  padding: 12px 14px;
+  margin: 8px 0;
+}
+
+.chat-bubble-assistant {
+  background: #ffffff;
+  color: #214836;
+  border: 1px solid #dceee2;
+  border-radius: 16px 16px 16px 0;
+  padding: 12px 14px;
+  margin: 8px 0;
+}
+
+/* Global Input & Button Polish */
+.stButton > button {
+  border-radius: 8px !important;
+  padding: 0.5rem 1rem !important;
+}
+.stTextInput > div > div > input {
+  border-radius: 8px !important;
+}
