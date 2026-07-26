@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     DB_NAME: str = "ecosort"
     # `best.pt` in older project copies was saved from the unpublished
     # `ultralytics_bower` fork and cannot be loaded by official Ultralytics.
-    YOLO_MODEL_PATH: str = str(BASE_DIR / "model" / "best.pt")
+    YOLO_MODEL_PATH: str = str(BASE_DIR / "model" / "best.onnx")
     DETECTION_THRESHOLD: float = 0.25
     UPLOAD_DIR: str = str(BASE_DIR / "backend" / "uploads")
     REPORTS_DIR: str = str(BASE_DIR / "reports")

@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from ultralytics import YOLO
+import onnxruntime as ort
 from backend.utils import settings
 from backend.utils import setup_logger
 
@@ -78,28 +78,73 @@ COCO_TO_WASTE_MAP = {
     "potted plant": "Biological",
 }
 
+def preprocess_image(image: np.ndarray, input_size: int = 640):
+    """Resize with letterbox padding, normalize, convert to CHW tensor."""
+    h, w = image.shape[:2]
+    scale = min(input_size / h, input_size / w)
+    new_h, new_w = int(h * scale), int(w * scale)
+
+    resized = cv2.resize(image, (new_w, new_h))
+    padded = np.full((input_size, input_size, 3), 114, dtype=np.uint8)
+    pad_top = (input_size - new_h) // 2
+    pad_left = (input_size - new_w) // 2
+    padded[pad_top:pad_top+new_h, pad_left:pad_left+new_w] = resized
+
+    img = padded[:, :, ::-1].astype(np.float32) / 255.0  # BGR->RGB, normalize
+    img = img.transpose(2, 0, 1)  # HWC -> CHW
+    img = np.expand_dims(img, axis=0)
+
+    return img, scale, pad_left, pad_top
+
+
+def nms(boxes, scores, iou_threshold=0.45):
+    """Standard Non-Max Suppression. boxes: (N,4) x1y1x2y2. Returns indices to keep."""
+    if len(boxes) == 0:
+        return []
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = (x2 - x1) * (y2 - y1)
+    order = scores.argsort()[::-1]
+    keep = []
+    while order.size > 0:
+        i = order[0]
+        keep.append(i)
+        xx1 = np.maximum(x1[i], x1[order[1:]])
+        yy1 = np.maximum(y1[i], y1[order[1:]])
+        xx2 = np.minimum(x2[i], x2[order[1:]])
+        yy2 = np.minimum(y2[i], y2[order[1:]])
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        inter = w * h
+        iou = inter / (areas[i] + areas[order[1:]] - inter)
+        inds = np.where(iou <= iou_threshold)[0]
+        order = order[inds + 1]
+    return keep
+
 
 class DetectionService:
+    CLASS_NAMES = {
+        0: 'battery', 1: 'biological', 2: 'brown-glass', 3: 'cardboard',
+        4: 'clothes', 5: 'green-glass', 6: 'metal', 7: 'paper',
+        8: 'plastic', 9: 'shoes', 10: 'trash', 11: 'white-glass'
+    }
+
     def __init__(self):
-        self.model = None
+        self.session = None
         self.is_loaded = False
         self.load_model()
 
     def load_model(self):
         try:
-            model_path = settings.YOLO_MODEL_PATH
+            model_path = settings.YOLO_MODEL_PATH  # should now point to best.onnx
 
             if not os.path.exists(model_path):
-                raise FileNotFoundError(
-                    f"Model not found at: {model_path}. Download an official model with "
-                    "'cd model && yolo predict model=yolo26n.pt source=YOUR_IMAGE.jpg', "
-                    "or set YOLO_MODEL_PATH to a compatible checkpoint."
-                )
+                raise FileNotFoundError(f"Model not found at: {model_path}")
 
-            logger.info(f"Loading YOLO model from: {model_path}")
-            self.model = YOLO(model_path)
+            logger.info(f"Loading ONNX model from: {model_path}")
+            self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+            self.input_name = self.session.get_inputs()[0].name
             self.is_loaded = True
-            logger.info(f"Model loaded. Classes: {self.model.names}")
+            logger.info("ONNX model loaded successfully.")
 
         except Exception as e:
             logger.error(f"Error loading model: {e}")
@@ -111,14 +156,40 @@ class DetectionService:
         if image is None:
             raise ValueError(f"Could not load image at {image_path}")
 
-        if not self.is_loaded or self.model is None:
+        if not self.is_loaded or self.session is None:
             raise RuntimeError("Detection model is not loaded. Check server logs for the load error.")
 
         return self._run_real_inference(image, threshold)
 
     def _run_real_inference(self, image: np.ndarray, threshold: float):
         try:
-            results = self.model(image, conf=threshold)[0]
+            input_tensor, scale, pad_left, pad_top = preprocess_image(image)
+            outputs = self.session.run(None, {self.input_name: input_tensor})[0]  # (1,16,8400)
+            outputs = outputs[0].T  # -> (8400, 16)
+
+            boxes_xywh = outputs[:, :4]
+            class_scores = outputs[:, 4:]
+            class_ids = np.argmax(class_scores, axis=1)
+            confidences = np.max(class_scores, axis=1)
+
+            mask = confidences >= threshold
+            boxes_xywh = boxes_xywh[mask]
+            class_ids = class_ids[mask]
+            confidences = confidences[mask]
+
+            if len(boxes_xywh) == 0:
+                return image.copy(), []
+
+            # convert xywh (center) -> x1y1x2y2, undo letterbox padding/scale
+            x_c, y_c, w, h = boxes_xywh[:, 0], boxes_xywh[:, 1], boxes_xywh[:, 2], boxes_xywh[:, 3]
+            x1 = (x_c - w / 2 - pad_left) / scale
+            y1 = (y_c - h / 2 - pad_top) / scale
+            x2 = (x_c + w / 2 - pad_left) / scale
+            y2 = (y_c + h / 2 - pad_top) / scale
+            boxes_xyxy = np.stack([x1, y1, x2, y2], axis=1)
+
+            keep = nms(boxes_xyxy, confidences, iou_threshold=0.45)
+
         except Exception as e:
             logger.error(f"Model inference failed: {e}")
             return image.copy(), []
@@ -140,21 +211,14 @@ class DetectionService:
             "Trash":        (80, 80, 80),
         }
 
-        if results.boxes is None or len(results.boxes) == 0:
-            return annotated_image, []
-
-        qualifying_boxes = [box for box in results.boxes if float(box.conf[0]) >= threshold]
-        if not qualifying_boxes:
-            return annotated_image, []
-
         detections = []
-        for box in qualifying_boxes:
-            coords = box.xyxy[0].tolist()
-            conf = float(box.conf[0])
-            name = self.model.names[int(box.cls[0])]
-            object_name = " ".join(word.capitalize() for word in name.split(" "))
+        for i in keep:
+            conf = float(confidences[i])
+            name = self.CLASS_NAMES[int(class_ids[i])]
+            object_name = name.capitalize()
+            category = object_name  # model already outputs waste categories directly
 
-            category = COCO_TO_WASTE_MAP.get(name, object_name)
+            coords = boxes_xyxy[i].tolist()
             detections.append({
                 "object_name": object_name,
                 "confidence": conf,
@@ -166,15 +230,15 @@ class DetectionService:
             x1, y1, x2, y2 = map(int, coords)
             cv2.rectangle(annotated_image, (x1, y1), (x2, y2), color, 3)
             label = f"{object_name} {conf:.2f}"
-            (w, h), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
-            cv2.rectangle(annotated_image, (x1, y1 - h - 12), (x1 + w + 6, y1), color, -1)
+            (w_txt, h_txt), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+            cv2.rectangle(annotated_image, (x1, y1 - h_txt - 12), (x1 + w_txt + 6, y1), color, -1)
             cv2.putText(annotated_image, label, (x1 + 3, y1 - 5),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 2)
 
         return annotated_image, detections
 
-detector_service = DetectionService()
 
+detector_service = DetectionService()
 
 import re
 import pandas as pd

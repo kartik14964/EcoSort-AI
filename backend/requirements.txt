@@ -2,7 +2,6 @@ fastapi
 uvicorn
 gunicorn
 pymongo
-ultralytics
 opencv-python-headless
 reportlab
 pandas
@@ -14,3 +13,4 @@ bcrypt
 PyJWT
 certifi
 python-dotenv
+onnxruntime
