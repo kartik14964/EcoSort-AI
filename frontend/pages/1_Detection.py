@@ -122,7 +122,7 @@ if mode == "Image Upload":
             files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
             response = requests.post(
                 f"{API_URL}/detect/image?threshold={conf_thresh}",
-                files=files, timeout=30, headers=get_auth_headers()
+                files=files, timeout=120, headers=get_auth_headers()
             )
             if response.status_code == 200:
                 res_data = response.json()
@@ -167,7 +167,7 @@ elif mode == "Webcam Snap":
             files = {"file": ("webcam.jpg", webcam_img, "image/jpeg")}
             response = requests.post(
                 f"{API_URL}/detect/image?threshold={conf_thresh}",
-                files=files, timeout=30, headers=get_auth_headers()
+                files=files, timeout=120, headers=get_auth_headers()
             )
             if response.status_code == 200:
                 res_data = response.json()

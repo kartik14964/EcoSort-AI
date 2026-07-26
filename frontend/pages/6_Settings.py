@@ -22,7 +22,7 @@ API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 def get_current_settings():
     try:
-        response = requests.get(f"{API_URL}/settings", timeout=5, headers=get_auth_headers())
+        response = requests.get(f"{API_URL}/settings", timeout=15, headers=get_auth_headers())
         if response.status_code == 200:
             return response.json()
         st.error(f"Could not load settings (status {response.status_code}).")
@@ -32,7 +32,7 @@ def get_current_settings():
 
 def save_system_settings(new_settings):
     try:
-        response = requests.put(f"{API_URL}/settings", json=new_settings, timeout=5, headers=get_auth_headers())
+        response = requests.put(f"{API_URL}/settings", json=new_settings, timeout=15, headers=get_auth_headers())
         if response.status_code == 200:
             return True
         st.error(f"Save failed (status {response.status_code}): {response.text}")
