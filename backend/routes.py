@@ -6,7 +6,7 @@ import base64
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, status, Depends
 from fastapi.responses import FileResponse
-
+import gc
 from backend.database import Repository
 from backend.ai_services import detector_service
 from backend.ai_services import RecommendationEngine
@@ -40,13 +40,13 @@ def update_settings(payload: SettingsUpdate, current_user: str = Depends(get_cur
         
     return Repository.update_settings(update_data)
 
-
 @router.post("/detect/image")
 async def detect_image(file: UploadFile = File(...), threshold: Optional[float] = Query(None, ge=0.0, le=1.0), current_user: str = Depends(get_current_user)):
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in [".jpg", ".jpeg", ".png"]:
         raise HTTPException(status_code=400, detail="Only JPG, JPEG, and PNG images are supported.")
 
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     temp_filename = f"upload_{uuid.uuid4()}{ext}"
     temp_path = os.path.join(settings.UPLOAD_DIR, temp_filename)
 
@@ -58,14 +58,17 @@ async def detect_image(file: UploadFile = File(...), threshold: Optional[float] 
         with open(temp_path, "wb") as f:
             f.write(contents)
             f.flush()
-            os.fsync(f.fileno())  # force write to disk
+            os.fsync(f.fileno())
+        del contents
+        gc.collect()
 
         logger.info(f"Saved: {temp_path}, size: {os.path.getsize(temp_path)} bytes")
 
-        # verify cv2 can read it
         test_read = cv2.imread(temp_path)
         if test_read is None:
             raise HTTPException(status_code=400, detail="Could not decode image. Try JPG or PNG.")
+        del test_read
+        gc.collect()
 
         sys_settings = Repository.get_settings()
         co2_factors = sys_settings.get("co2_factors", settings.CO2_SAVINGS_FACTORS)
@@ -75,11 +78,9 @@ async def detect_image(file: UploadFile = File(...), threshold: Optional[float] 
 
         logger.info(f"Running detection with threshold: {threshold}")
         annotated_img, detections = detector_service.detect_objects(temp_path, threshold)
+        detections = [det for det in detections if float(det["confidence"]) >= threshold]
         logger.info(f"Detection complete. Found {len(detections)} items.")
 
-        annotated_path = ""  # not saved to disk until user clicks Save
-
-        # Enrich detections with recommendation data (not saved yet — user must click Save)
         saved_detections = []
         for det in detections:
             rec = RecommendationEngine.get_recommendation(det["object_name"], det["category"])
@@ -89,19 +90,24 @@ async def detect_image(file: UploadFile = File(...), threshold: Optional[float] 
             det["bin_color"] = rec["bin_color"]
             det["special_instructions"] = rec.get("special_instructions", "")
             det["carbon_saved_kg"] = round(factor * 0.25, 3)
-            det["image_path"] = annotated_path
+            det["image_path"] = ""
             saved_detections.append(det)
-                    
 
         success, buffer = cv2.imencode('.jpg', annotated_img)
+        del annotated_img
+        gc.collect()
+
         if not success or buffer is None:
             raise HTTPException(status_code=500, detail="Failed to encode image.")
+
         img_base64 = base64.b64encode(buffer).decode('utf-8')
+        del buffer
+        gc.collect()
 
         return {
             "detections": saved_detections,
             "annotated_image_b64": img_base64,
-            "annotated_image_path": annotated_path
+            "annotated_image_path": ""
         }
 
     except HTTPException:
@@ -113,7 +119,8 @@ async def detect_image(file: UploadFile = File(...), threshold: Optional[float] 
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
-
+        gc.collect()
+        
 @router.get("/detections")
 def get_detections(
     category: Optional[str] = Query(None),

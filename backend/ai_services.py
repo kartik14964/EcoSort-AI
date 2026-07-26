@@ -164,14 +164,28 @@ class DetectionService:
 
     def detect_objects(self, image_path: str, threshold: float = None):
         threshold = threshold if threshold is not None else settings.DETECTION_THRESHOLD
+
+        # ✅ Reload session if it died
+        if not self.is_loaded or self.session is None:
+            logger.warning("Session not available, reloading...")
+            self.load_model()
+        if not self.is_loaded or self.session is None:
+            raise RuntimeError("Detection model failed to load.")
+
         image = cv2.imread(image_path)
         if image is None:
             raise ValueError(f"Could not load image at {image_path}")
 
-        if not self.is_loaded or self.session is None:
-            raise RuntimeError("Detection model is not loaded. Check server logs for the load error.")
+        # ✅ Resize large images to save memory
+        h, w = image.shape[:2]
+        if max(h, w) > 640:
+            scale = 640 / max(h, w)
+            image = cv2.resize(image, (int(w * scale), int(h * scale)))
 
-        return self._run_real_inference(image, threshold)
+        result = self._run_real_inference(image, threshold)
+        del image
+        gc.collect()
+        return result
 
     def _run_real_inference(self, image: np.ndarray, threshold: float):
         input_tensor = outputs = boxes_xywh = class_scores = None  # for cleanup in finally
