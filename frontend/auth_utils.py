@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import os
 import json
+import time
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
@@ -22,15 +23,17 @@ def _load_token() -> str | None:
 def _clear_token():
     if os.path.exists(TOKEN_CACHE_FILE):
         os.remove(TOKEN_CACHE_FILE)
+
 def _wake_backend():
-    """Fire a silent, best-effort ping to wake a sleeping backend early."""
-    if "backend_pinged" not in st.session_state:
-        st.session_state.backend_pinged = True
+    """Fire a silent, best-effort ping to wake a sleeping backend, re-pinging periodically."""
+    last_ping = st.session_state.get("backend_last_ping", 0)
+    if time.time() - last_ping > 300:
+        st.session_state.backend_last_ping = time.time()
         try:
             health_url = API_BASE_URL.replace("/api", "/health")
-            requests.get(health_url, timeout=2)
+            requests.get(health_url, timeout=5)
         except Exception:
-            pass  # don't block page load if this fails or is still booting
+            pass
 
 
 def check_auth():
@@ -63,6 +66,7 @@ def check_auth():
                 if submit:
                     try:
                         with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
+                            _wake_backend()
                             resp = requests.post(
                                 f"{API_BASE_URL}/auth/login",
                                 json={"username": username, "password": password},
@@ -77,7 +81,7 @@ def check_auth():
                             try:
                                 detail = resp.json().get("detail", "Login failed.")
                             except Exception:
-                                detail = "Login failed. Please try again."
+                                detail = f"Login failed (status {resp.status_code}). Raw response: {resp.text[:200]}"
                             st.error(detail)
                     except Exception as e:
                         st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
@@ -93,6 +97,7 @@ def check_auth():
                 if submit_reg:
                     try:
                         with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
+                            _wake_backend()
                             resp = requests.post(
                                 f"{API_BASE_URL}/auth/register",
                                 json={"username": new_username, "password": new_password},
@@ -108,7 +113,7 @@ def check_auth():
                             try:
                                 detail = resp.json().get("detail", "Registration failed.")
                             except Exception:
-                                detail = "Registration failed. Please try again."
+                                detail = f"Registration failed (status {resp.status_code}). Raw response: {resp.text[:200]}"
                             st.error(detail)
                     except Exception as e:
                         st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
