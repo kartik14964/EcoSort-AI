@@ -92,10 +92,12 @@ def check_auth():
 
                 if submit_reg:
                     try:
-                        resp = requests.post(
-                            f"{API_BASE_URL}/auth/register",
-                            json={"username": new_username, "password": new_password}
-                        )
+                        with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
+                            resp = requests.post(
+                                f"{API_BASE_URL}/auth/register",
+                                json={"username": new_username, "password": new_password},
+                                timeout=90
+                            )
                         if resp.status_code == 200:
                             token = resp.json()["access_token"]
                             st.session_state.token = token
@@ -103,9 +105,13 @@ def check_auth():
                             st.success("Registration successful! Logging you in...")
                             st.rerun()
                         else:
-                            st.error(resp.json().get("detail", "Registration failed."))
+                            try:
+                                detail = resp.json().get("detail", "Registration failed.")
+                            except Exception:
+                                detail = "Registration failed. Please try again."
+                            st.error(detail)
                     except Exception as e:
-                        st.error(f"Cannot connect to backend: {e}")
+                        st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
 
     st.stop()
 

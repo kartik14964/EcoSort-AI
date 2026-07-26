@@ -22,7 +22,7 @@ class GroqClassifier:
         try:
             from groq import Groq
             self.client = Groq(api_key=api_key)
-            self.model_name = "meta-llama/llama-4-maverick-17b-128e-instruct"
+            self.model_name = "meta-llama/llama-4-scout-17b-16e-instruct"
             self.available = True
             logger.info("Groq Vision classifier loaded.")
         except Exception as e:
