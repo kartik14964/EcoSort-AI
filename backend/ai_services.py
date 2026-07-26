@@ -40,22 +40,23 @@ class GroqClassifier:
             mime = "image/png" if ext == "png" else "image/jpeg"
 
             prompt = """You are a waste classification expert for a sustainability app.
-Classify this waste item into exactly one of these categories:
-Plastic, Paper, Metal, Brown-glass, Green-glass, White-glass,
-Biological, Battery, Cardboard, Clothes, Shoes, Trash
+    Classify this waste item into exactly one of these categories:
+    Plastic, Paper, Metal, Brown-glass, Green-glass, White-glass,
+    Biological, Battery, Cardboard, Clothes, Shoes, Trash
 
-Rules:
-- Brown-glass = brown/amber glass bottles or jars
-- Green-glass = green glass bottles or jars
-- White-glass = clear/transparent glass bottles or jars
-- Biological = food waste, organic matter, plants
-- Battery = any battery type
-- Cardboard = cardboard boxes, packaging
-- Clothes = clothing, fabric items
-- Shoes = footwear
-- Trash = non-recyclable or ambiguous items (styrofoam, ceramics, mixed materials)
+    Rules:
+    - Brown-glass = brown/amber glass bottles or jars
+    - Green-glass = green glass bottles or jars
+    - White-glass = clear/transparent glass bottles or jars
+    - Biological = food waste, organic matter, plants
+    - Battery = any battery type
+    - Cardboard = cardboard boxes, packaging
+    - Clothes = clothing, fabric items
+    - Shoes = footwear
+    - Trash = non-recyclable or ambiguous items (styrofoam, ceramics, mixed materials)
 
-Respond with JSON only: {"category": "category_name", "confidence": 0.95}"""
+    Respond with ONLY a JSON object, no other text, no explanation, no reasoning shown.
+    Format: {"category": "category_name", "confidence": 0.95}"""
 
             response = self.client.chat.completions.create(
                 model=self.model_name,
@@ -66,11 +67,21 @@ Respond with JSON only: {"category": "category_name", "confidence": 0.95}"""
                         {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}}
                     ]
                 }],
-                response_format={"type": "json_object"}
+                response_format={"type": "json_object"},
+                temperature=0,
+                max_tokens=200,
             )
 
             text = response.choices[0].message.content.strip()
-            result = json.loads(text)
+
+            # Resilient parsing: extract the JSON object even if there's stray text around it
+            import re
+            match = re.search(r'\{.*\}', text, re.DOTALL)
+            if not match:
+                logger.warning(f"Groq returned no JSON object. Raw text: {text!r}")
+                return {"category": "Trash", "confidence": 0.0}
+
+            result = json.loads(match.group(0))
 
             if result.get("category") not in self.VALID_CATEGORIES:
                 result["category"] = "Trash"
@@ -81,7 +92,6 @@ Respond with JSON only: {"category": "category_name", "confidence": 0.95}"""
         except Exception as e:
             logger.error(f"Groq classification failed: {e}")
             return {"category": "Trash", "confidence": 0.0}
-
 
 def preprocess_image(image: np.ndarray, input_size: int = 416):
     h, w = image.shape[:2]
