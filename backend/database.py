@@ -1,3 +1,4 @@
+import time
 import pymongo
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 import certifi
@@ -30,28 +31,41 @@ class DatabaseConnection:
 
         return normalized
 
-    def connect(self):
+    def connect(self, retries: int = 3, delay_seconds: float = 2.0):
         mongo_uri = self._normalize_mongo_uri(settings.MONGO_URI)
-        try:
-            self.client = pymongo.MongoClient(
-                mongo_uri,
-                serverSelectionTimeoutMS=2500,
-                appname="ecosort-ai",
-                tlsCAFile=certifi.where(),
-            )
-            self.client.admin.command("ping")
-            self.db = self.client[settings.DB_NAME]
-            self.is_mock = False
-            self.mode = "mongodb"
-            self.status_message = f"Connected to MongoDB database '{settings.DB_NAME}'."
-            logger.info("Successfully connected to MongoDB.")
-        except (ConnectionFailure, ServerSelectionTimeoutError, Exception) as e:
-            logger.error(f"MongoDB connection failed: {e}")
-            self.is_mock = False
-            self.mode = "failed"
-            self.status_message = f"MongoDB connection failed: {e}"
-            self.client = None
-            self.db = None
+
+        for attempt in range(1, retries + 1):
+            try:
+                self.client = pymongo.MongoClient(
+                    mongo_uri,
+                    serverSelectionTimeoutMS=8000,
+                    appname="ecosort-ai",
+                    tlsCAFile=certifi.where(),
+                )
+                self.client.admin.command("ping")
+                self.db = self.client[settings.DB_NAME]
+                self.is_mock = False
+                self.mode = "mongodb"
+                self.status_message = f"Connected to MongoDB database '{settings.DB_NAME}'."
+                logger.info(f"Successfully connected to MongoDB (attempt {attempt}).")
+                return
+            except (ConnectionFailure, ServerSelectionTimeoutError, Exception) as e:
+                logger.warning(f"MongoDB connection attempt {attempt}/{retries} failed: {e}")
+                self.client = None
+                self.db = None
+                if attempt < retries:
+                    time.sleep(delay_seconds)
+
+        self.is_mock = False
+        self.mode = "failed"
+        self.status_message = "MongoDB connection failed after retries."
+        logger.error("MongoDB connection failed after all retry attempts.")
+
+    def ensure_connected(self):
+        """Lazily retry the connection if a previous attempt failed."""
+        if self.db is None:
+            logger.info("Database connection not ready, retrying...")
+            self.connect(retries=1, delay_seconds=0)
 
 
 db_conn = DatabaseConnection()
@@ -80,6 +94,7 @@ class Repository:
 
     @staticmethod
     def get_settings():
+        db_conn.ensure_connected()
         try:
             settings_doc = db_conn.db.settings.find_one({"_id": "default"})
             if not settings_doc:
@@ -98,6 +113,7 @@ class Repository:
 
     @staticmethod
     def update_settings(new_settings):
+        db_conn.ensure_connected()
         try:
             db_conn.db.settings.update_one(
                 {"_id": "default"},
@@ -111,6 +127,7 @@ class Repository:
 
     @staticmethod
     def insert_detection(detection):
+        db_conn.ensure_connected()
         if "timestamp" not in detection:
             detection["timestamp"] = datetime.utcnow()
         if "_id" not in detection:
@@ -126,6 +143,7 @@ class Repository:
 
     @staticmethod
     def get_detections(filters=None, limit=100):
+        db_conn.ensure_connected()
         filters = filters or {}
 
         query = {}
@@ -177,6 +195,7 @@ class Repository:
 
     @classmethod
     def get_user_by_username(cls, username: str) -> Optional[dict]:
+        db_conn.ensure_connected()
         try:
             return db_conn.db.users.find_one({"username": username})
         except Exception as e:
@@ -185,6 +204,7 @@ class Repository:
 
     @classmethod
     def create_user(cls, user_data: dict) -> str:
+        db_conn.ensure_connected()
         try:
             res = db_conn.db.users.insert_one(user_data)
             return str(res.inserted_id)
