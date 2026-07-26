@@ -21,7 +21,7 @@ load_css()
 # Enforce Authentication
 check_auth()
 
-API_URL = "http://localhost:8000/api"
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 def get_history_data(category=None):
     url = f"{API_URL}/detections?limit=1000"

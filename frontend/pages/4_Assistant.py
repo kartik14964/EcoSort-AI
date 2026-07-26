@@ -2,10 +2,6 @@ import streamlit as st
 import requests
 from frontend.auth_utils import check_auth, get_auth_headers
 import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from backend.ai_services import AIAssistantService
 
 # Page Setup
 st.set_page_config(page_title="EcoSort AI - Chatbot Assistant", page_icon="💬", layout="wide")
@@ -22,7 +18,7 @@ load_css()
 # Enforce Authentication
 check_auth()
 
-API_URL = "http://localhost:8000/api"
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 st.title("💬 AI Sustainability Assistant")
 st.write("Ask natural language questions about your recycling rates, waste volumes, carbon offsets, and trends.")
@@ -69,23 +65,21 @@ user_input = st.chat_input("Ask a sustainability question...")
 query = selected_suggestion or user_input
 
 if query:
-    # Add user message to state and display
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.write(query)
-        
-    # Get reply
+
     with st.spinner("Analyzing data logs..."):
+        reply = None
         try:
-            response = requests.post(f"{API_URL}/chatbot", json={"message": query}, timeout=3, headers=get_auth_headers())
+            response = requests.post(f"{API_URL}/chatbot", json={"message": query}, timeout=10, headers=get_auth_headers())
             if response.status_code == 200:
                 reply = response.json()["reply"]
             else:
-                reply = AIAssistantService.answer_query(query)
-        except Exception:
-            reply = AIAssistantService.answer_query(query)
-            
-    # Add assistant response to state and display
+                reply = f"⚠️ Sorry, I couldn't process that (status {response.status_code}). Please try again."
+        except Exception as e:
+            reply = f"⚠️ Cannot connect to the backend right now: {e}"
+
     st.session_state.messages.append({"role": "assistant", "content": reply})
     with st.chat_message("assistant"):
         st.write(reply)

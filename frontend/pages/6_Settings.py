@@ -2,10 +2,6 @@ import streamlit as st
 import requests
 from frontend.auth_utils import check_auth, get_auth_headers
 import os
-import sys
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-from backend.utils import settings
 
 # Page Setup
 st.set_page_config(page_title="EcoSort AI - Settings", page_icon="⚙️", layout="wide")
@@ -22,7 +18,7 @@ load_css()
 # Enforce Authentication
 check_auth()
 
-API_URL = "http://localhost:8000/api"
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 def get_current_settings():
     try:
@@ -61,7 +57,7 @@ else:
         det_thresh = st.slider(
             "Global Confidence Threshold", 
             0.0, 1.0, 
-            float(current_config.get("detection_threshold", settings.DETECTION_THRESHOLD)), 
+            float(current_config.get("detection_threshold", 0.25)),
             0.05
         )
         cam_src = st.text_input(
@@ -73,7 +69,7 @@ else:
         st.subheader("CO₂ Savings Emission Factors (kg saved per kg material)")
         st.write("Configure standard greenhouse gas offset models based on regional environmental frameworks.")
         
-        current_factors = current_config.get("co2_factors", settings.CO2_SAVINGS_FACTORS)
+        current_factors = current_config.get("co2_factors", {})
         
         categories = ["Plastic", "Paper", "Metal", "Brown-glass", "Green-glass",
                       "White-glass", "Biological", "Battery", "Cardboard",

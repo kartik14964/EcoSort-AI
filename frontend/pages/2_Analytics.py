@@ -24,7 +24,7 @@ load_css()
 # Enforce Authentication
 check_auth()
 
-API_URL = "http://localhost:8000/api"
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 # Fetch all historical detections for full charting
 def load_detections_dataframe(days=30):

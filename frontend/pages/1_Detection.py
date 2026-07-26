@@ -2,12 +2,7 @@ import streamlit as st
 import requests
 from frontend.auth_utils import check_auth, get_auth_headers
 import os
-import sys
 import base64
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
-
-from backend.utils import settings
 
 # Page Setup
 st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
@@ -24,9 +19,7 @@ load_css()
 # Enforce Authentication
 check_auth()
 
-API_URL = "http://localhost:8000/api"
-
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 
 def filter_by_confidence(detections, threshold):
@@ -123,11 +116,6 @@ if mode == "Image Upload":
     if uploaded_file is not None:
         st.write("Processing image...")
 
-        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-        temp_path = os.path.join(settings.UPLOAD_DIR, f"temp_{uploaded_file.name}")
-        with open(temp_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
-
         res_data = None
         try:
             uploaded_file.seek(0)
@@ -142,9 +130,6 @@ if mode == "Image Upload":
                 st.error(f"Detection failed: {response.text}")
         except Exception as e:
             st.error(f"API Connection Error: {e}")
-
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
 
         if res_data:
             col1, col2 = st.columns([1, 1])
@@ -165,7 +150,6 @@ if mode == "Image Upload":
                 detections = filter_by_confidence(res_data.get("detections", []), conf_thresh)
                 render_detections(detections, conf_thresh)
 
-            # ── SAVE BUTTON under annotated image ──
             if detections:
                 with col1:
                     save_to_db(detections, key="save_image")
@@ -176,10 +160,6 @@ elif mode == "Webcam Snap":
 
     if webcam_img is not None:
         st.write("Analyzing camera snapshot...")
-        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-        temp_path = os.path.join(settings.UPLOAD_DIR, "webcam_snap.jpg")
-        with open(temp_path, "wb") as f:
-            f.write(webcam_img.getbuffer())
 
         res_data = None
         try:
@@ -195,9 +175,6 @@ elif mode == "Webcam Snap":
                 st.error(f"Detection failed: {response.text}")
         except Exception as e:
             st.error(f"API Connection Error: {e}")
-
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
 
         if res_data:
             col1, col2 = st.columns([1, 1])
