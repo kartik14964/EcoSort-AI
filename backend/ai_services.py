@@ -35,10 +35,8 @@ class GroqClassifier:
         try:
             with open(image_path, "rb") as f:
                 image_b64 = base64.b64encode(f.read()).decode("utf-8")
-
             ext = image_path.lower().split(".")[-1]
             mime = "image/png" if ext == "png" else "image/jpeg"
-
             prompt = """You are a waste classification expert for a sustainability app.
     Classify this waste item into exactly one of these categories:
     Plastic, Paper, Metal, Brown-glass, Green-glass, White-glass,
@@ -55,8 +53,8 @@ class GroqClassifier:
     - Shoes = footwear
     - Trash = non-recyclable or ambiguous items (styrofoam, ceramics, mixed materials)
 
-    Respond with ONLY a JSON object, no other text, no explanation, no reasoning shown.
-    Format: {"category": "category_name", "confidence": 0.95}"""
+    After thinking, respond with ONLY a JSON object on the final line, nothing else after it.
+    Example: {"category": "Plastic", "confidence": 0.95}"""
 
             response = self.client.chat.completions.create(
                 model=self.model_name,
@@ -67,21 +65,36 @@ class GroqClassifier:
                         {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}}
                     ]
                 }],
-                response_format={"type": "json_object"},
                 temperature=0,
-                max_tokens=200,
+                max_tokens=2048,
+                reasoning_effort="none",
             )
 
             text = response.choices[0].message.content.strip()
 
-            # Resilient parsing: extract the JSON object even if there's stray text around it
             import re
-            match = re.search(r'\{.*\}', text, re.DOTALL)
+            text_clean = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL).strip()
+            match = re.search(r'\{[^{}]*\}', text_clean, re.DOTALL) or re.search(r'\{[^{}]*\}', text, re.DOTALL)
+
             if not match:
                 logger.warning(f"Groq returned no JSON object. Raw text: {text!r}")
                 return {"category": "Trash", "confidence": 0.0}
 
             result = json.loads(match.group(0))
+
+            raw_category = str(result.get("category", "")).strip()
+            normalized = raw_category.replace(" ", "-").replace("_", "-")
+
+            matched = None
+            for valid in self.VALID_CATEGORIES:
+                if normalized.lower() == valid.lower():
+                    matched = valid
+                    break
+
+            result["category"] = matched if matched else "Trash"
+
+            logger.info(f"Groq raw category: {raw_category!r} -> normalized: {result['category']}")
+            return result
 
             if result.get("category") not in self.VALID_CATEGORIES:
                 result["category"] = "Trash"
@@ -92,7 +105,6 @@ class GroqClassifier:
         except Exception as e:
             logger.error(f"Groq classification failed: {e}")
             return {"category": "Trash", "confidence": 0.0}
-
 def preprocess_image(image: np.ndarray, input_size: int = 416):
     h, w = image.shape[:2]
     scale = min(input_size / h, input_size / w)
