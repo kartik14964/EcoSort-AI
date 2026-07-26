@@ -3,7 +3,7 @@ import requests
 import os
 import json
 
-API_BASE_URL = "http://localhost:8000/api"
+API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
 def _save_token(token: str):

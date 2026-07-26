@@ -28,7 +28,7 @@ if st.sidebar.button("Logout"):
     logout()
 
 # API Base URL
-API_URL = "http://localhost:8000/api"
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 def get_dashboard_summary():
     try:
