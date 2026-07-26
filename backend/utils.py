@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = str(BASE_DIR / "backend" / "uploads")
     REPORTS_DIR: str = str(BASE_DIR / "reports")
     JWT_SECRET_KEY: str = "default-insecure-secret"
+    GROQ_API_KEY: str = ""
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     
     # Standard emission factors (kg CO2 saved per kg of recycled material)

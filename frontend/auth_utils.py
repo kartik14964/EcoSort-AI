@@ -22,8 +22,20 @@ def _load_token() -> str | None:
 def _clear_token():
     if os.path.exists(TOKEN_CACHE_FILE):
         os.remove(TOKEN_CACHE_FILE)
+def _wake_backend():
+    """Fire a silent, best-effort ping to wake a sleeping backend early."""
+    if "backend_pinged" not in st.session_state:
+        st.session_state.backend_pinged = True
+        try:
+            health_url = API_BASE_URL.replace("/api", "/health")
+            requests.get(health_url, timeout=2)
+        except Exception:
+            pass  # don't block page load if this fails or is still booting
+
 
 def check_auth():
+    _wake_backend()
+
     if "token" not in st.session_state or not st.session_state.token:
         st.session_state.token = _load_token()
 
@@ -50,19 +62,25 @@ def check_auth():
 
                 if submit:
                     try:
-                        resp = requests.post(
-                            f"{API_BASE_URL}/auth/login",
-                            json={"username": username, "password": password}
-                        )
+                        with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
+                            resp = requests.post(
+                                f"{API_BASE_URL}/auth/login",
+                                json={"username": username, "password": password},
+                                timeout=90
+                            )
                         if resp.status_code == 200:
                             token = resp.json()["access_token"]
                             st.session_state.token = token
                             _save_token(token)
                             st.rerun()
                         else:
-                            st.error(resp.json().get("detail", "Login failed."))
+                            try:
+                                detail = resp.json().get("detail", "Login failed.")
+                            except Exception:
+                                detail = "Login failed. Please try again."
+                            st.error(detail)
                     except Exception as e:
-                        st.error(f"Cannot connect to backend: {e}")
+                        st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
 
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
