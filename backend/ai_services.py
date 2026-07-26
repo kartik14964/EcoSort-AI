@@ -4,6 +4,7 @@ import numpy as np
 import onnxruntime as ort
 from backend.utils import settings
 from backend.utils import setup_logger
+import gc
 
 logger = setup_logger("detector_service")
 
@@ -90,8 +91,8 @@ def preprocess_image(image: np.ndarray, input_size: int = 416):
     pad_left = (input_size - new_w) // 2
     padded[pad_top:pad_top+new_h, pad_left:pad_left+new_w] = resized
 
-    img = padded[:, :, ::-1].astype(np.float32) / 255.0  # BGR->RGB, normalize
-    img = img.transpose(2, 0, 1)  # HWC -> CHW
+    img = padded[:, :, ::-1].astype(np.float32) / 255.0
+    img = img.transpose(2, 0, 1)
     img = np.expand_dims(img, axis=0)
 
     return img, scale, pad_left, pad_top
@@ -135,7 +136,7 @@ class DetectionService:
 
     def load_model(self):
         try:
-            model_path = settings.YOLO_MODEL_PATH  # should now point to best.onnx
+            model_path = settings.YOLO_MODEL_PATH
 
             if not os.path.exists(model_path):
                 raise FileNotFoundError(f"Model not found at: {model_path}")
@@ -162,10 +163,11 @@ class DetectionService:
         return self._run_real_inference(image, threshold)
 
     def _run_real_inference(self, image: np.ndarray, threshold: float):
+        input_tensor = outputs = boxes_xywh = class_scores = None  # for cleanup in finally
         try:
             input_tensor, scale, pad_left, pad_top = preprocess_image(image)
-            outputs = self.session.run(None, {self.input_name: input_tensor})[0]  # (1,16,8400)
-            outputs = outputs[0].T  # -> (8400, 16)
+            outputs = self.session.run(None, {self.input_name: input_tensor})[0]
+            outputs = outputs[0].T
 
             boxes_xywh = outputs[:, :4]
             class_scores = outputs[:, 4:]
@@ -177,10 +179,17 @@ class DetectionService:
             class_ids = class_ids[mask]
             confidences = confidences[mask]
 
+            # NEW: cap candidates before NMS to bound peak memory/CPU
+            MAX_CANDIDATES = 300
+            if len(boxes_xywh) > MAX_CANDIDATES:
+                top_idx = np.argsort(confidences)[-MAX_CANDIDATES:]
+                boxes_xywh = boxes_xywh[top_idx]
+                class_ids = class_ids[top_idx]
+                confidences = confidences[top_idx]
+
             if len(boxes_xywh) == 0:
                 return image.copy(), []
 
-            # convert xywh (center) -> x1y1x2y2, undo letterbox padding/scale
             x_c, y_c, w, h = boxes_xywh[:, 0], boxes_xywh[:, 1], boxes_xywh[:, 2], boxes_xywh[:, 3]
             x1 = (x_c - w / 2 - pad_left) / scale
             y1 = (y_c - h / 2 - pad_top) / scale
@@ -193,6 +202,10 @@ class DetectionService:
         except Exception as e:
             logger.error(f"Model inference failed: {e}")
             return image.copy(), []
+        finally:
+            # NEW: explicit cleanup so memory doesn't accumulate across requests
+            del input_tensor, outputs, boxes_xywh, class_scores
+            gc.collect()
 
         annotated_image = image.copy()
 
@@ -216,7 +229,7 @@ class DetectionService:
             conf = float(confidences[i])
             name = self.CLASS_NAMES[int(class_ids[i])]
             object_name = name.capitalize()
-            category = object_name  # model already outputs waste categories directly
+            category = object_name
 
             coords = boxes_xyxy[i].tolist()
             detections.append({
