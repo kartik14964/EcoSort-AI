@@ -303,6 +303,20 @@ div[data-testid="stMarkdownContainer"] p {
   background: var(--surface) !important;
 }
 
+/* ✅ Fix sidebar selectbox - dark text on white background */
+[data-testid="stSidebar"] .stSelectbox > div > div {
+  color: #0e2d20 !important;
+  background: #ffffff !important;
+}
+
+[data-testid="stSidebar"] .stSelectbox > div > div > div {
+  color: #0e2d20 !important;
+}
+
+[data-testid="stSidebar"] .stSelectbox span {
+  color: #0e2d20 !important;
+}
+
 .stTextInput > div > div > input:focus,
 .stNumberInput > div > div > input:focus {
   border-color: var(--brand-500) !important;
