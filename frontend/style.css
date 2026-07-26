@@ -5,18 +5,11 @@
 footer { visibility: hidden; }
 .stDeployButton { display: none; }
 
+[data-testid="stHeader"] { background: transparent !important; }
+[data-testid="stToolbar"] { background: transparent !important; }
 
-[data-testid="stHeader"] {
-  background: transparent !important;
-}
+html, body, .stApp { background-color: #fbfefc !important; }
 
-[data-testid="stToolbar"] {
-  background: transparent !important;
-}
-
-html, body, .stApp {
-  background-color: #fbfefc !important;
-}
 /* ---------- Design tokens ---------- */
 :root {
   --brand-50:  #f0faf4;
@@ -46,9 +39,7 @@ html, body, .stApp {
   --radius-lg: 20px;
 }
 
-* {
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-}
+* { font-family: "Inter", -apple-system, BlinkMacSystemFont, sans-serif; }
 
 /* ---------- App background ---------- */
 .stApp {
@@ -73,26 +64,11 @@ html, body, .stApp {
   border-right: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-[data-testid="stSidebar"] * {
-  color: #ffffff !important;
-}
-
-[data-testid="stSidebar"] .stRadio label,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] label {
-  color: #cfe6d8 !important;
-}
-
-[data-testid="stSidebar"] h1,
-[data-testid="stSidebar"] h2,
-[data-testid="stSidebar"] h3 {
-  color: #ffffff !important;
-  font-weight: 700;
-}
-
+/* Sidebar nav links */
 [data-testid="stSidebarNav"] a {
   border-radius: var(--radius-sm);
   transition: background 0.15s ease, transform 0.1s ease;
+  color: #ffffff !important;
 }
 
 [data-testid="stSidebarNav"] a:hover {
@@ -104,8 +80,44 @@ html, body, .stApp {
   box-shadow: inset 3px 0 0 var(--brand-500);
 }
 
+/* Sidebar text elements */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3 {
+  color: #ffffff !important;
+  font-weight: 700;
+}
+
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] label {
+  color: #cfe6d8 !important;
+}
+
 [data-testid="stSidebar"] hr {
   border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Sidebar logout button */
+[data-testid="stSidebar"] .stButton > button {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+}
+
+[data-testid="stSidebar"] .stButton > button:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+/* Sidebar selectbox — white box, dark text inside */
+[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] {
+  background: #ffffff !important;
+  border-radius: 10px !important;
+}
+
+[data-testid="stSidebar"] .stSelectbox [data-baseweb="select"] * {
+  color: #0e2d20 !important;
+  background: #ffffff !important;
 }
 
 /* ---------- Typography ---------- */
@@ -285,6 +297,7 @@ div[data-testid="stMarkdownContainer"] p {
 .stButton > button[kind="primary"] {
   background: linear-gradient(120deg, var(--brand-600), var(--brand-500)) !important;
   border: none !important;
+  color: #ffffff !important;
   box-shadow: 0 8px 20px rgba(31, 155, 98, 0.28) !important;
 }
 
@@ -301,20 +314,6 @@ div[data-testid="stMarkdownContainer"] p {
   border-color: var(--border) !important;
   color: var(--ink-900) !important;
   background: var(--surface) !important;
-}
-
-/* ✅ Fix sidebar selectbox - dark text on white background */
-[data-testid="stSidebar"] .stSelectbox > div > div {
-  color: #0e2d20 !important;
-  background: #ffffff !important;
-}
-
-[data-testid="stSidebar"] .stSelectbox > div > div > div {
-  color: #0e2d20 !important;
-}
-
-[data-testid="stSidebar"] .stSelectbox span {
-  color: #0e2d20 !important;
 }
 
 .stTextInput > div > div > input:focus,
