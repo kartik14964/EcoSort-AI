@@ -78,7 +78,7 @@ COCO_TO_WASTE_MAP = {
     "potted plant": "Biological",
 }
 
-def preprocess_image(image: np.ndarray, input_size: int = 640):
+def preprocess_image(image: np.ndarray, input_size: int = 416):
     """Resize with letterbox padding, normalize, convert to CHW tensor."""
     h, w = image.shape[:2]
     scale = min(input_size / h, input_size / w)
