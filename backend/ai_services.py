@@ -142,7 +142,18 @@ class DetectionService:
                 raise FileNotFoundError(f"Model not found at: {model_path}")
 
             logger.info(f"Loading ONNX model from: {model_path}")
-            self.session = ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+
+            # NEW: disable memory arena so ORT releases memory after each run
+            sess_options = ort.SessionOptions()
+            sess_options.enable_cpu_mem_arena = False
+            sess_options.enable_mem_pattern = False
+            sess_options.enable_mem_reuse = False
+
+            self.session = ort.InferenceSession(
+                model_path,
+                sess_options=sess_options,
+                providers=["CPUExecutionProvider"]
+            )
             self.input_name = self.session.get_inputs()[0].name
             self.is_loaded = True
             logger.info("ONNX model loaded successfully.")
