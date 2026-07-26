@@ -5,6 +5,18 @@
 footer { visibility: hidden; }
 .stDeployButton { display: none; }
 
+
+[data-testid="stHeader"] {
+  background: transparent !important;
+}
+
+[data-testid="stToolbar"] {
+  background: transparent !important;
+}
+
+html, body, .stApp {
+  background-color: #fbfefc !important;
+}
 /* ---------- Design tokens ---------- */
 :root {
   --brand-50:  #f0faf4;
