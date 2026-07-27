@@ -3,9 +3,18 @@ import requests
 import os
 import json
 import time
+import threading
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
+
+# Render free-tier cold starts commonly take 30-60s, sometimes more
+# (especially if the app opens a DB connection on startup). Retry on a
+# time budget instead of a fixed number of attempts, so we don't give
+# up right before the backend finishes booting.
+WAKE_TOTAL_BUDGET_SECONDS = 100
+REQUEST_TIMEOUT_SECONDS = 15
+POLL_INTERVAL_SECONDS = 3
 
 
 def _save_token(token: str):
@@ -29,45 +38,58 @@ def _clear_token():
 
 
 def _wake_backend():
-    """Fire a silent, best-effort ping to wake a sleeping backend early."""
-    if "backend_pinged" not in st.session_state:
-        st.session_state.backend_pinged = True
+    """Fire-and-forget background ping to start waking a sleeping
+    backend the instant the page loads, without blocking the render."""
+    if "backend_wake_started" in st.session_state:
+        return
+    st.session_state.backend_wake_started = True
+
+    def _ping():
+        health_url = API_BASE_URL.replace("/api", "/health")
         try:
-            health_url = API_BASE_URL.replace("/api", "/health")
-            requests.get(health_url, timeout=3)
+            requests.get(health_url, timeout=REQUEST_TIMEOUT_SECONDS)
         except Exception:
             pass
 
+    threading.Thread(target=_ping, daemon=True).start()
 
-def _post_with_retry(url: str, payload: dict, status_placeholder, max_attempts: int = 6):
+
+def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: int = WAKE_TOTAL_BUDGET_SECONDS):
     """
     POST with retries to survive a cold-starting backend.
-    Render's free tier returns fast 502s while booting (not slow timeouts),
-    so we retry with short waits instead of one long timeout.
+    Retries on a TIME BUDGET (not a fixed attempt count) so a slow
+    cold start doesn't get cut off early. Keeps polling every few
+    seconds until either a real response comes back or the budget
+    runs out.
     Returns (response_or_None, error_message_or_None).
     """
-    wait_times = [0, 3, 5, 8, 10, 15]  # seconds between attempts
+    start = time.time()
+    attempt = 0
 
-    for attempt in range(max_attempts):
-        if attempt > 0:
+    while time.time() - start < total_budget:
+        attempt += 1
+        elapsed = int(time.time() - start)
+
+        if attempt > 1:
             status_placeholder.info(
-                f"⏳ Server is waking up, please wait... (attempt {attempt + 1} of {max_attempts})"
+                f"⏳ Server is waking up, please wait... ({elapsed}s elapsed)"
             )
-            time.sleep(wait_times[attempt])
 
         try:
-            resp = requests.post(url, json=payload, timeout=20)
+            resp = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
         except requests.exceptions.RequestException:
-            continue  # connection failed entirely, try again
+            time.sleep(POLL_INTERVAL_SECONDS)
+            continue
 
         # 502/503/504 mean the proxy is up but the app isn't ready yet - retry
         if resp.status_code in (502, 503, 504):
+            time.sleep(POLL_INTERVAL_SECONDS)
             continue
 
         # Any other response (200, 401, 400, etc.) is a real answer - stop retrying
         return resp, None
 
-    return None, "The server didn't wake up in time. Please try again in a moment."
+    return None, "The server is taking a bit longer than usual to wake up. Please try logging in again — it should be ready now."
 
 
 def check_auth():
