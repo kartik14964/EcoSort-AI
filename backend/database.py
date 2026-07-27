@@ -13,10 +13,14 @@ class DatabaseConnection:
         self.client = None
         self.db = None
         self.is_mock = False
-        self.mode = "initializing"
-        self.status_message = "Initializing storage connection..."
+        self.mode = "not_connected"
+        self.status_message = "Storage connection has not been requested yet."
         self._last_attempt = 0.0
-        self.connect()
+        # Do not connect during module import.  FastAPI imports every router
+        # before it can answer even /health, and a cold Mongo connection can
+        # otherwise make authentication wait behind startup work it does not
+        # need.  ``ensure_connected`` opens the connection on the first route
+        # that actually uses storage.
 
     @staticmethod
     def _normalize_mongo_uri(uri: str) -> str:

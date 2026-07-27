@@ -4,6 +4,7 @@ import json
 import base64
 import numpy as np
 import onnxruntime as ort
+import threading
 from backend.utils import settings
 from backend.utils import setup_logger
 import gc
@@ -93,12 +94,6 @@ class GroqClassifier:
             result["category"] = matched if matched else "Trash"
 
             logger.info(f"Groq raw category: {raw_category!r} -> normalized: {result['category']}")
-            return result
-
-            if result.get("category") not in self.VALID_CATEGORIES:
-                result["category"] = "Trash"
-
-            logger.info(f"Groq result: {result['category']} ({result.get('confidence', 0):.2f})")
             return result
 
         except Exception as e:
@@ -320,7 +315,30 @@ class DetectionService:
         return annotated_image, detections
 
 
-detector_service = DetectionService()
+class LazyDetectionService:
+    """Create the ONNX session only when image detection is first requested.
+
+    Importing API routes must stay cheap: login and health do not require the
+    vision model, and eagerly loading it makes every cold start block auth.
+    """
+
+    def __init__(self):
+        self._instance = None
+        self._lock = threading.Lock()
+
+    def _get_instance(self) -> DetectionService:
+        if self._instance is None:
+            with self._lock:
+                if self._instance is None:
+                    logger.info("Initializing ONNX detector on first detection request.")
+                    self._instance = DetectionService()
+        return self._instance
+
+    def detect_objects(self, image_path: str, threshold: float = None):
+        return self._get_instance().detect_objects(image_path, threshold)
+
+
+detector_service = LazyDetectionService()
 
 
 import pandas as pd

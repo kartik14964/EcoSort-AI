@@ -2,8 +2,10 @@ import streamlit as st
 import requests
 import os
 import json
+import logging
 import time
 import threading
+from urllib.parse import urlsplit, urlunsplit
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
@@ -15,6 +17,16 @@ TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 WAKE_TOTAL_BUDGET_SECONDS = 150
 REQUEST_TIMEOUT_SECONDS = 70
 POLL_INTERVAL_SECONDS = 8
+
+logger = logging.getLogger(__name__)
+
+# This state intentionally lives outside Streamlit session state.  The warm-up
+# request is shared by all sessions in this process, and the worker thread must
+# not read or write Streamlit session state.
+_backend_wake_lock = threading.Lock()
+_backend_wake_complete = threading.Event()
+_backend_wake_started = False
+_backend_wake_error: str | None = None
 
 
 def _save_token(token: str):
@@ -37,21 +49,58 @@ def _clear_token():
         os.remove(TOKEN_CACHE_FILE)
 
 
+def _health_url() -> str:
+    """Return the backend health URL without modifying the hostname.
+
+    ``str.replace('/api', '/health')`` also changes a hostname containing
+    ``api``.  Build the URL from its parsed path instead.
+    """
+    parsed = urlsplit(API_BASE_URL)
+    api_path = parsed.path.rstrip("/")
+    health_path = f"{api_path[:-4]}/health" if api_path.endswith("/api") else "/health"
+    return urlunsplit((parsed.scheme, parsed.netloc, health_path, "", ""))
+
+
 def _wake_backend():
-    """Fire-and-forget background ping to start waking a sleeping
-    backend the instant the page loads, without blocking the render."""
-    if "backend_wake_started" in st.session_state:
-        return
-    st.session_state.backend_wake_started = True
+    """Start exactly one background health request for this process."""
+    global _backend_wake_started, _backend_wake_error
 
-    def _ping():
-        health_url = API_BASE_URL.replace("/api", "/health")
-        try:
-            requests.get(health_url, timeout=REQUEST_TIMEOUT_SECONDS)
-        except Exception:
-            pass
+    with _backend_wake_lock:
+        if _backend_wake_started:
+            return
+        _backend_wake_started = True
 
-    threading.Thread(target=_ping, daemon=True).start()
+        def _ping():
+            global _backend_wake_error
+            started = time.monotonic()
+            try:
+                response = requests.get(_health_url(), timeout=(15, REQUEST_TIMEOUT_SECONDS))
+                response.raise_for_status()
+                logger.info("Backend wake check completed in %.1fs", time.monotonic() - started)
+            except requests.RequestException as exc:
+                _backend_wake_error = f"{type(exc).__name__}: {exc}"
+                logger.warning(
+                    "Backend wake check failed after %.1fs: %s",
+                    time.monotonic() - started,
+                    _backend_wake_error,
+                )
+            finally:
+                _backend_wake_complete.set()
+
+        threading.Thread(target=_ping, daemon=True, name="ecosort-backend-wake").start()
+
+
+def _wait_for_backend_wake(status_placeholder) -> None:
+    """Avoid racing an auth POST against the page-load cold-start request."""
+    started = time.monotonic()
+    while not _backend_wake_complete.wait(timeout=1):
+        elapsed = int(time.monotonic() - started)
+        status_placeholder.info(f"⏳ Server is waking up, please wait... ({elapsed}s elapsed)")
+
+    if _backend_wake_error:
+        # The auth request below remains the source of truth.  This log line is
+        # essential when a Render proxy or egress path differs from local curl.
+        logger.info("Proceeding with auth after failed wake check: %s", _backend_wake_error)
 
 def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: int = WAKE_TOTAL_BUDGET_SECONDS):
     """
@@ -61,13 +110,14 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
     don't trip Render's rate limiting while it wakes up.
     Returns (response_or_None, error_message_or_None).
     """
-    start = time.time()
+    start = time.monotonic()
     attempt = 0
     wait = 5
+    last_error = None
 
-    while time.time() - start < total_budget:
+    while time.monotonic() - start < total_budget:
         attempt += 1
-        elapsed = int(time.time() - start)
+        elapsed = int(time.monotonic() - start)
 
         if attempt > 1:
             status_placeholder.info(
@@ -75,8 +125,17 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
             )
 
         try:
-            resp = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
-        except requests.exceptions.RequestException:
+            request_started = time.monotonic()
+            resp = requests.post(url, json=payload, timeout=(15, REQUEST_TIMEOUT_SECONDS))
+            logger.info(
+                "Auth request attempt %s completed in %.1fs with status %s",
+                attempt,
+                time.monotonic() - request_started,
+                resp.status_code,
+            )
+        except requests.exceptions.RequestException as exc:
+            last_error = f"{type(exc).__name__}: {exc}"
+            logger.warning("Auth request attempt %s failed: %s", attempt, last_error)
             time.sleep(wait)
             wait = min(wait + 2, 10)
             continue
@@ -90,6 +149,7 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
         # Any other response (200, 401, 400, etc.) is a real answer - stop retrying
         return resp, None
 
+    logger.error("Auth request exhausted its %ss wake budget; last error: %s", total_budget, last_error)
     return None, "The server is taking a bit longer than usual to wake up. Please try logging in again — it should be ready now."
 
 def check_auth():
@@ -121,6 +181,7 @@ def check_auth():
 
                 if submit:
                     status_placeholder = st.empty()
+                    _wait_for_backend_wake(status_placeholder)
                     resp, err = _post_with_retry(
                         f"{API_BASE_URL}/auth/login",
                         {"username": username, "password": password},
@@ -156,6 +217,7 @@ def check_auth():
 
                 if submit_reg:
                     status_placeholder = st.empty()
+                    _wait_for_backend_wake(status_placeholder)
                     resp, err = _post_with_retry(
                         f"{API_BASE_URL}/auth/register",
                         {"username": new_username, "password": new_password},
