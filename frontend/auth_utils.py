@@ -12,8 +12,8 @@ TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 # (especially if the app opens a DB connection on startup). Retry on a
 # time budget instead of a fixed number of attempts, so we don't give
 # up right before the backend finishes booting.
-WAKE_TOTAL_BUDGET_SECONDS = 100
-REQUEST_TIMEOUT_SECONDS = 15
+WAKE_TOTAL_BUDGET_SECONDS = 150
+REQUEST_TIMEOUT_SECONDS = 70
 POLL_INTERVAL_SECONDS = 8
 
 
