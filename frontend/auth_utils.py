@@ -71,6 +71,8 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
             continue
 
         if resp.status_code == 429 or resp.status_code in (502, 503, 504):
+            last_error = f"HTTP {resp.status_code}"
+            logger.warning("Auth request attempt %s got retryable status %s, retrying...", attempt, resp.status_code)
             time.sleep(wait)
             wait = min(wait + 2, 10)
             continue
