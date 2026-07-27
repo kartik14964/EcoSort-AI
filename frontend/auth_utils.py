@@ -14,7 +14,7 @@ TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 # up right before the backend finishes booting.
 WAKE_TOTAL_BUDGET_SECONDS = 100
 REQUEST_TIMEOUT_SECONDS = 15
-POLL_INTERVAL_SECONDS = 3
+POLL_INTERVAL_SECONDS = 8
 
 
 def _save_token(token: str):
@@ -53,18 +53,17 @@ def _wake_backend():
 
     threading.Thread(target=_ping, daemon=True).start()
 
-
 def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: int = WAKE_TOTAL_BUDGET_SECONDS):
     """
     POST with retries to survive a cold-starting backend.
     Retries on a TIME BUDGET (not a fixed attempt count) so a slow
-    cold start doesn't get cut off early. Keeps polling every few
-    seconds until either a real response comes back or the budget
-    runs out.
+    cold start doesn't get cut off early. Backs off gradually so we
+    don't trip Render's rate limiting while it wakes up.
     Returns (response_or_None, error_message_or_None).
     """
     start = time.time()
     attempt = 0
+    wait = 5
 
     while time.time() - start < total_budget:
         attempt += 1
@@ -78,19 +77,20 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
         try:
             resp = requests.post(url, json=payload, timeout=REQUEST_TIMEOUT_SECONDS)
         except requests.exceptions.RequestException:
-            time.sleep(POLL_INTERVAL_SECONDS)
+            time.sleep(wait)
+            wait = min(wait + 2, 10)
             continue
 
-        # 502/503/504 mean the proxy is up but the app isn't ready yet - retry
-        if resp.status_code in (502, 503, 504):
-            time.sleep(POLL_INTERVAL_SECONDS)
+        # 429 = rate limited, 502/503/504 = proxy up but app not ready - retry both
+        if resp.status_code == 429 or resp.status_code in (502, 503, 504):
+            time.sleep(wait)
+            wait = min(wait + 2, 10)
             continue
 
         # Any other response (200, 401, 400, etc.) is a real answer - stop retrying
         return resp, None
 
     return None, "The server is taking a bit longer than usual to wake up. Please try logging in again — it should be ready now."
-
 
 def check_auth():
     _wake_backend()
