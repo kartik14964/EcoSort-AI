@@ -7,9 +7,11 @@ import time
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
+
 def _save_token(token: str):
     with open(TOKEN_CACHE_FILE, "w") as f:
         json.dump({"token": token}, f)
+
 
 def _load_token() -> str | None:
     try:
@@ -20,20 +22,52 @@ def _load_token() -> str | None:
         return None
     return None
 
+
 def _clear_token():
     if os.path.exists(TOKEN_CACHE_FILE):
         os.remove(TOKEN_CACHE_FILE)
 
+
 def _wake_backend():
-    """Fire a silent, best-effort ping to wake a sleeping backend, re-pinging periodically."""
-    last_ping = st.session_state.get("backend_last_ping", 0)
-    if time.time() - last_ping > 300:
-        st.session_state.backend_last_ping = time.time()
+    """Fire a silent, best-effort ping to wake a sleeping backend early."""
+    if "backend_pinged" not in st.session_state:
+        st.session_state.backend_pinged = True
         try:
             health_url = API_BASE_URL.replace("/api", "/health")
-            requests.get(health_url, timeout=5)
+            requests.get(health_url, timeout=3)
         except Exception:
             pass
+
+
+def _post_with_retry(url: str, payload: dict, status_placeholder, max_attempts: int = 6):
+    """
+    POST with retries to survive a cold-starting backend.
+    Render's free tier returns fast 502s while booting (not slow timeouts),
+    so we retry with short waits instead of one long timeout.
+    Returns (response_or_None, error_message_or_None).
+    """
+    wait_times = [0, 3, 5, 8, 10, 15]  # seconds between attempts
+
+    for attempt in range(max_attempts):
+        if attempt > 0:
+            status_placeholder.info(
+                f"⏳ Server is waking up, please wait... (attempt {attempt + 1} of {max_attempts})"
+            )
+            time.sleep(wait_times[attempt])
+
+        try:
+            resp = requests.post(url, json=payload, timeout=20)
+        except requests.exceptions.RequestException:
+            continue  # connection failed entirely, try again
+
+        # 502/503/504 mean the proxy is up but the app isn't ready yet - retry
+        if resp.status_code in (502, 503, 504):
+            continue
+
+        # Any other response (200, 401, 400, etc.) is a real answer - stop retrying
+        return resp, None
+
+    return None, "The server didn't wake up in time. Please try again in a moment."
 
 
 def check_auth():
@@ -64,27 +98,31 @@ def check_auth():
                 submit = st.form_submit_button("Log In to Dashboard", width="stretch")
 
                 if submit:
-                    try:
-                        with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
-                            _wake_backend()
-                            resp = requests.post(
-                                f"{API_BASE_URL}/auth/login",
-                                json={"username": username, "password": password},
-                                timeout=90
-                            )
-                        if resp.status_code == 200:
+                    status_placeholder = st.empty()
+                    resp, err = _post_with_retry(
+                        f"{API_BASE_URL}/auth/login",
+                        {"username": username, "password": password},
+                        status_placeholder
+                    )
+                    status_placeholder.empty()
+
+                    if err:
+                        st.error(err)
+                    elif resp.status_code == 200:
+                        try:
                             token = resp.json()["access_token"]
                             st.session_state.token = token
                             _save_token(token)
                             st.rerun()
+                        except (ValueError, KeyError):
+                            st.error("Unexpected response from server. Please try again.")
+                    else:
+                        content_type = resp.headers.get("content-type", "")
+                        if "application/json" in content_type:
+                            detail = resp.json().get("detail", "Login failed.")
                         else:
-                            try:
-                                detail = resp.json().get("detail", "Login failed.")
-                            except Exception:
-                                detail = f"Login failed (status {resp.status_code}). Raw response: {resp.text[:200]}"
-                            st.error(detail)
-                    except Exception as e:
-                        st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
+                            detail = f"Login failed (status {resp.status_code}). Please try again."
+                        st.error(detail)
 
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -95,28 +133,32 @@ def check_auth():
                 submit_reg = st.form_submit_button("Register New Account", width="stretch")
 
                 if submit_reg:
-                    try:
-                        with st.spinner("Connecting... this can take up to a minute if the server was asleep."):
-                            _wake_backend()
-                            resp = requests.post(
-                                f"{API_BASE_URL}/auth/register",
-                                json={"username": new_username, "password": new_password},
-                                timeout=90
-                            )
-                        if resp.status_code == 200:
+                    status_placeholder = st.empty()
+                    resp, err = _post_with_retry(
+                        f"{API_BASE_URL}/auth/register",
+                        {"username": new_username, "password": new_password},
+                        status_placeholder
+                    )
+                    status_placeholder.empty()
+
+                    if err:
+                        st.error(err)
+                    elif resp.status_code == 200:
+                        try:
                             token = resp.json()["access_token"]
                             st.session_state.token = token
                             _save_token(token)
                             st.success("Registration successful! Logging you in...")
                             st.rerun()
+                        except (ValueError, KeyError):
+                            st.error("Unexpected response from server. Please try again.")
+                    else:
+                        content_type = resp.headers.get("content-type", "")
+                        if "application/json" in content_type:
+                            detail = resp.json().get("detail", "Registration failed.")
                         else:
-                            try:
-                                detail = resp.json().get("detail", "Registration failed.")
-                            except Exception:
-                                detail = f"Registration failed (status {resp.status_code}). Raw response: {resp.text[:200]}"
-                            st.error(detail)
-                    except Exception as e:
-                        st.error(f"Cannot connect to backend: {e}. If the server was asleep, please wait a moment and try again.")
+                            detail = f"Registration failed (status {resp.status_code}). Please try again."
+                        st.error(detail)
 
     st.stop()
 

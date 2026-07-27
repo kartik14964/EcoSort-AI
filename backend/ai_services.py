@@ -10,7 +10,6 @@ import gc
 
 logger = setup_logger("detector_service")
 
-
 class GroqClassifier:
     VALID_CATEGORIES = {
         "Plastic", "Paper", "Metal", "Brown-glass", "Green-glass",

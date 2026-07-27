@@ -110,16 +110,18 @@ left_col, right_col = st.columns([2, 1])
 with left_col:
     st.subheader("Platform Overview")
     st.markdown("""
-    EcoSort AI represents the next generation of environmental engineering. By integrating **Computer Vision (YOLOv8)** 
-    deep learning models with carbon impact models, we enable facility managers, corporate headquarters, and city departments 
-    to track recycling efficiency, prevent contamination, and estimate carbon offsets in real-time.
-    
-    ### Core Capabilities
-    - **Real-Time CV Inference**: Detect glass, plastics, metals, paper, organic food scraps, e-waste, and hazardous batteries.
-    - **Disposal Recommendation Engine**: Provide dynamic instructions on rinse cycles, correct containment bins, and local recovery centers.
-    - **Carbon Offset Projections**: Track absolute greenhouse gas mitigation metrics backed by standard emission data models.
-    - **Interactive Analytics**: Generate insights, trends, distribution charts, and printable compliance-ready PDF reports.
-    """)
+        EcoSort AI represents the next generation of environmental engineering. By integrating a fast, on-device **ONNX 
+        computer vision model** with an **AI vision fallback** for uncertain cases, we enable facility managers, corporate 
+        headquarters, and city departments to track recycling efficiency, prevent contamination, and estimate carbon 
+        offsets in real-time.
+        
+        ### Core Capabilities
+        - **Real-Time CV Inference**: Detect glass, plastics, metals, paper, organic food scraps, e-waste, and hazardous batteries using an optimized ONNX model.
+        - **AI Vision Fallback**: When the primary model is uncertain, a large multimodal AI model steps in to classify ambiguous items.
+        - **Disposal Recommendation Engine**: Provide dynamic instructions on rinse cycles, correct containment bins, and local recovery centers.
+        - **Carbon Offset Projections**: Track absolute greenhouse gas mitigation metrics backed by standard emission data models.
+        - **Interactive Analytics**: Generate insights, trends, distribution charts, and printable compliance-ready PDF reports.
+        """)
     
     st.info("💡 **Quick Start:** Head over to the **Detection** tab in the sidebar to scan waste items via Webcam feed, image, or video upload.")
 
