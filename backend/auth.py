@@ -2,7 +2,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
-
+from fastapi import APIRouter, Depends, HTTPException, status
 from backend.schemas import UserCreate, UserLogin, UserInDB, Token
 from backend.database import Repository
 from backend.utils import settings
@@ -31,30 +31,39 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 @router.post("/register", response_model=Token)
 async def register(user: UserCreate):
-    # Check if user exists
-    existing_user = Repository.get_user_by_username(user.username)
+    try:
+        existing_user = Repository.get_user_by_username(user.username)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     if existing_user:
         raise HTTPException(status_code=400, detail="Username already registered")
-    
-    # Create user
+
     hashed_password = hash_password(user.password)
     user_db = UserInDB(username=user.username, hashed_password=hashed_password)
-    Repository.create_user(user_db.dict())
-    
-    # Generate token
+
+    try:
+        Repository.create_user(user_db.dict())
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(user.username, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
 async def login(user: UserLogin):
-    user_data = Repository.get_user_by_username(user.username)
+    try:
+        user_data = Repository.get_user_by_username(user.username)
+    except RuntimeError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
     if not user_data:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+
     if not verify_password(user.password, user_data.get("hashed_password")):
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
+
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(user.username, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}

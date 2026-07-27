@@ -15,24 +15,34 @@ class DatabaseConnection:
         self.is_mock = False
         self.mode = "initializing"
         self.status_message = "Initializing storage connection..."
+        self._last_attempt = 0.0
         self.connect()
 
     @staticmethod
     def _normalize_mongo_uri(uri: str) -> str:
-        if not uri:
-            return "mongodb://127.0.0.1:27017"
+        if not uri or not uri.strip():
+            raise RuntimeError("MONGO_URI is not set. Add it in Render's Environment tab.")
 
         normalized = uri.strip()
-        if not normalized:
-            return "mongodb://127.0.0.1:27017"
 
-        if normalized.startswith("<") or normalized.endswith(">"):
-            return "mongodb+srv://kartikrawat14964_db_user:<db_password>@cluster0.evb5qua.mongodb.net/?appName=Cluster0"
+        if normalized.startswith("<") or normalized.endswith(">") or "<db_password>" in normalized:
+            raise RuntimeError(
+                "MONGO_URI still contains a placeholder value — set the real "
+                "connection string in Render's Environment tab."
+            )
 
         return normalized
 
     def connect(self, retries: int = 3, delay_seconds: float = 2.0):
-        mongo_uri = self._normalize_mongo_uri(settings.MONGO_URI)
+        try:
+            mongo_uri = self._normalize_mongo_uri(settings.MONGO_URI)
+        except RuntimeError as e:
+            logger.error(str(e))
+            self.client = None
+            self.db = None
+            self.mode = "failed"
+            self.status_message = str(e)
+            return
 
         for attempt in range(1, retries + 1):
             try:
@@ -62,10 +72,20 @@ class DatabaseConnection:
         logger.error("MongoDB connection failed after all retry attempts.")
 
     def ensure_connected(self):
-        """Lazily retry the connection if a previous attempt failed."""
+        """Lazily retry the connection if a previous attempt failed,
+        but don't let every request pay an 8s+ retry penalty."""
+        if self.db is not None:
+            return
+
+        now = time.time()
+        if self._last_attempt and (now - self._last_attempt) < 15:
+            raise RuntimeError("Database temporarily unavailable, please retry shortly.")
+
+        self._last_attempt = now
+        self.connect(retries=1, delay_seconds=0)
+
         if self.db is None:
-            logger.info("Database connection not ready, retrying...")
-            self.connect(retries=1, delay_seconds=0)
+            raise RuntimeError("Database temporarily unavailable, please retry shortly.")
 
 
 db_conn = DatabaseConnection()
