@@ -1,16 +1,14 @@
 import json
 import logging
 import os
+import threading
 import time
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
-# Render free-tier cold starts commonly take 30-60s. We set a overall budget
-# of 180s to allow the backend plenty of time to boot and load ML models.
 WAKE_TOTAL_BUDGET_SECONDS = 180
 REQUEST_TIMEOUT_SECONDS = 75
 
@@ -37,21 +35,23 @@ def _clear_token():
         os.remove(TOKEN_CACHE_FILE)
 
 
+def _ping_backend_background():
+    """Fires a non-blocking background request to wake up the Render service immediately on app load."""
+    try:
+        requests.get("https://ecosort-backend-yz6m.onrender.com/health", timeout=3)
+    except Exception:
+        pass
+
+
 def _post_with_retry(
     url: str,
     payload: dict,
     status_placeholder,
     total_budget: int = WAKE_TOTAL_BUDGET_SECONDS,
 ):
-    """POST with backoff to survive a cold-starting backend.
-
-    Longer wait periods between retries help avoid flooding Render/Cloudflare
-    edge proxies with rapid requests, which can trigger HTTP 429 while the
-    server wakes up.
-    """
     start = time.monotonic()
     attempt = 0
-    wait = 15  # 15s -> 30s -> 60s
+    wait = 5  # Reduced initial wait for faster response if server boots quickly
     last_error = None
 
     while time.monotonic() - start < total_budget:
@@ -118,15 +118,10 @@ def check_auth():
     if st.session_state.token:
         return True
 
-    # Ping the backend from the USER'S BROWSER (a clean residential IP),
-    # not from Render's own network. This wakes a sleeping backend without
-    # tripping Cloudflare's edge protection on Render's outbound NAT IP.
-    components.html("""
-        <script>
-            fetch("https://ecosort-backend-yz6m.onrender.com/health", { mode: 'no-cors' })
-                .catch(() => {});
-        </script>
-    """, height=0)
+    # Fire a background thread to wake up Render the exact moment the login page loads
+    if "woke_up" not in st.session_state:
+        st.session_state.woke_up = True
+        threading.Thread(target=_ping_backend_background, daemon=True).start()
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown(
@@ -151,27 +146,11 @@ def check_auth():
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="e.g. admin")
                 password = st.text_input(
-                    "Password", type="password", placeholder="••••••••"
+                    "Password", type="password", placeholder="••••••••", autocomplete="nope"
                 )
-                components.html("""
-                    <script>
-                        function disableSuggestion() {
-                            const inputs = window.parent.document.querySelectorAll('input[type="password"]');
-                            inputs.forEach(input => {
-                                input.setAttribute('autocomplete', 'new-password');
-                                input.setAttribute('data-lpignore', 'true');
-                                input.setAttribute('data-1p-ignore', 'true');
-                            });
-                        }
-                        disableSuggestion();
-                        const observer = new MutationObserver(disableSuggestion);
-                        observer.observe(window.parent.document.body, { childList: true, subtree: true });
-                        setTimeout(() => observer.disconnect(), 5000);
-                    </script>
-                """, height=0)
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button(
-                    "Log In to Dashboard", width="stretch"
+                    "Log In to Dashboard", use_container_width=True
                 )
 
                 if submit:
@@ -196,8 +175,7 @@ def check_auth():
                             st.rerun()
                         except (ValueError, KeyError):
                             st.error(
-                                "Unexpected response from server. Please try"
-                                " again."
+                                "Unexpected response from server. Please try again."
                             )
                     else:
                         content_type = resp.headers.get("content-type", "")
@@ -214,11 +192,11 @@ def check_auth():
                     "Choose Username", placeholder="e.g. jane_doe"
                 )
                 new_password = st.text_input(
-                    "Choose Password", type="password", placeholder="••••••••"
+                    "Choose Password", type="password", placeholder="••••••••", autocomplete="new-password"
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit_reg = st.form_submit_button(
-                    "Register New Account", width="stretch"
+                    "Register New Account", use_container_width=True
                 )
 
                 if submit_reg:
@@ -246,8 +224,7 @@ def check_auth():
                             st.rerun()
                         except (ValueError, KeyError):
                             st.error(
-                                "Unexpected response from server. Please try"
-                                " again."
+                                "Unexpected response from server. Please try again."
                             )
                     else:
                         content_type = resp.headers.get("content-type", "")
