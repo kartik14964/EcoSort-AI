@@ -2,15 +2,13 @@ import json
 import logging
 import os
 import threading
-import time
 import requests
 import streamlit as st
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
-WAKE_TOTAL_BUDGET_SECONDS = 180
-REQUEST_TIMEOUT_SECONDS = 75
+REQUEST_TIMEOUT_SECONDS = 90
 
 logger = logging.getLogger(__name__)
 
@@ -43,72 +41,16 @@ def _ping_backend_background():
         pass
 
 
-def _post_with_retry(
-    url: str,
-    payload: dict,
-    status_placeholder,
-    total_budget: int = WAKE_TOTAL_BUDGET_SECONDS,
-):
-    start = time.monotonic()
-    attempt = 0
-    wait = 5  # Reduced initial wait for faster response if server boots quickly
-    last_error = None
-
-    while time.monotonic() - start < total_budget:
-        attempt += 1
-
-        if attempt > 1:
-            elapsed = int(time.monotonic() - start)
-            status_placeholder.info(
-                f"⏳ Server is waking up, please wait... ({elapsed}s elapsed)"
-            )
-
-        try:
-            request_started = time.monotonic()
-            resp = requests.post(
-                url, json=payload, timeout=(15, REQUEST_TIMEOUT_SECONDS)
-            )
-            logger.info(
-                "Auth request attempt %s completed in %.1fs with status %s",
-                attempt,
-                time.monotonic() - request_started,
-                resp.status_code,
-            )
-        except requests.exceptions.RequestException as exc:
-            last_error = f"{type(exc).__name__}: {exc}"
-            logger.warning(
-                "Auth request attempt %s failed: %s. Backing off for %ss...",
-                attempt,
-                last_error,
-                wait,
-            )
-            time.sleep(wait)
-            wait = min(wait * 2, 60)
-            continue
-
-        if resp.status_code == 429 or resp.status_code in (502, 503, 504):
-            last_error = f"HTTP {resp.status_code}"
-            logger.warning(
-                "Auth request attempt %s got status %s, backing off for %ss...",
-                attempt,
-                resp.status_code,
-                wait,
-            )
-            time.sleep(wait)
-            wait = min(wait * 2, 60)
-            continue
-
+def _post_once(url: str, payload: dict, status_placeholder, timeout: int = REQUEST_TIMEOUT_SECONDS):
+    """Send exactly one request. No retries, no backoff — if it fails, it fails."""
+    status_placeholder.info("⏳ Connecting to server, please wait...")
+    try:
+        resp = requests.post(url, json=payload, timeout=(15, timeout))
+        logger.info("Auth request completed with status %s", resp.status_code)
         return resp, None
-
-    logger.error(
-        "Auth request exhausted its %ss budget; last error: %s",
-        total_budget,
-        last_error,
-    )
-    return (
-        None,
-        "The server is taking longer than usual to respond. Please try again in a moment.",
-    )
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Auth request failed: %s", exc)
+        return None, f"Could not reach the server: {exc}"
 
 
 def check_auth():
@@ -146,7 +88,7 @@ def check_auth():
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="e.g. admin")
                 password = st.text_input(
-                    "Password", type="password", placeholder="••••••••", autocomplete="nope"
+                    "Password", type="password", placeholder="••••••••"
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button(
@@ -155,10 +97,7 @@ def check_auth():
 
                 if submit:
                     status_placeholder = st.empty()
-                    status_placeholder.info(
-                        "⏳ Server is starting up, please wait..."
-                    )
-                    resp, err = _post_with_retry(
+                    resp, err = _post_once(
                         f"{API_BASE_URL}/auth/login",
                         {"username": username, "password": password},
                         status_placeholder,
@@ -201,10 +140,7 @@ def check_auth():
 
                 if submit_reg:
                     status_placeholder = st.empty()
-                    status_placeholder.info(
-                        "⏳ Server is starting up, please wait..."
-                    )
-                    resp, err = _post_with_retry(
+                    resp, err = _post_once(
                         f"{API_BASE_URL}/auth/register",
                         {"username": new_username, "password": new_password},
                         status_placeholder,
