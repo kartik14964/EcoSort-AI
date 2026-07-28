@@ -1,15 +1,13 @@
 import json
 import logging
 import os
-import threading
+import time
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
 
+# Ensure the URL uses HTTPS to prevent browser security blocks
 API_BASE_URL = os.environ.get("API_URL", "https://ecosort-backend-yz6m.onrender.com/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
-
-BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
 logger = logging.getLogger(__name__)
 
@@ -30,103 +28,38 @@ def _clear_token():
     if os.path.exists(TOKEN_CACHE_FILE):
         os.remove(TOKEN_CACHE_FILE)
 
-def _ping_backend_background():
-    """Fires a background request to wake up Render."""
+def _wake_up_server(status_placeholder):
+    """Pings the health endpoint to wake up Render cleanly with user feedback."""
+    health_url = API_BASE_URL.replace("/api", "/health")
+    
+    # Quick check if already awake
     try:
-        requests.get(
-            "https://ecosort-backend-yz6m.onrender.com/health",
-            headers=BROWSER_HEADERS,
-            timeout=3,
-        )
+        resp = requests.get(health_url, timeout=3)
+        if resp.status_code == 200:
+            return True
     except Exception:
         pass
-def _client_side_auth(endpoint_url: str, payload: dict, action_name: str):
-    """Executes authentication with an automatic retry loop to survive Render cold starts."""
-    component_id = f"auth_fetch_{abs(hash(endpoint_url + action_name))}"
-    payload_json_str = json.dumps(payload)
 
-    html_code = f"""
-        <div id="status-{component_id}" style="font-family: sans-serif; font-size: 0.9rem; color: #334155; padding: 4px 0;">
-            ⏳ Connecting to server...
-        </div>
-        <script>
-        async function performAuth() {{
-            const statusEl = document.getElementById("status-{component_id}");
-            let attempts = 15; // Try up to 15 times (60 seconds)
-            
-            while (attempts > 0) {{
-                try {{
-                    const response = await fetch("{endpoint_url}", {{
-                        method: "POST",
-                        headers: {{
-                            "Content-Type": "application/json",
-                            "Accept": "application/json"
-                        }},
-                        body: JSON.stringify({payload_json_str})
-                    }});
-
-                    let data = {{}};
-                    try {{
-                        data = await response.json();
-                    }} catch (e) {{}}
-
-                    if (response.ok) {{
-                        const token = data.access_token || data.token;
-                        if (token) {{
-                            statusEl.innerHTML = "✅ Success! Redirecting...";
-                            const currentUrl = new URL(window.parent.location.href);
-                            currentUrl.searchParams.set("client_token", token);
-                            window.parent.location.href = currentUrl.toString();
-                        }} else {{
-                            statusEl.innerHTML = "❌ Error: Token missing.";
-                            statusEl.style.color = "#dc2626";
-                        }}
-                    }} else {{
-                        let errorMsg = data.detail || data.message || "Authentication failed.";
-                        if (typeof errorMsg === 'object') errorMsg = JSON.stringify(errorMsg);
-                        statusEl.innerHTML = "❌ " + errorMsg;
-                        statusEl.style.color = "#dc2626";
-                    }}
-                    return; // The server responded, so we exit the loop!
-                    
-                }} catch (err) {{
-                    attempts--;
-                    if (attempts === 0) {{
-                        statusEl.innerHTML = "❌ Network error: Server is offline.";
-                        statusEl.style.color = "#dc2626";
-                        return;
-                    }}
-                    // If network fails, update text and wait 4 seconds before trying again
-                    statusEl.innerHTML = "⏳ Server is waking up... retrying (" + attempts + " attempts left)";
-                    await new Promise(r => setTimeout(r, 4000)); 
-                }}
-            }}
-        }}
-        performAuth();
-        </script>
-        """
-    components.html(html_code, height=50)
+    # If sleeping, show a friendly status and wait for it to boot
+    status_placeholder.info("⏳ Waking up secure server from sleep (this takes about 30 seconds)...")
     
-def check_auth():
-    query_params = st.query_params
-    if "client_token" in query_params:
-        token_val = query_params["client_token"]
-        if isinstance(token_val, list):
-            token_val = token_val[0]
-        st.session_state.token = token_val
-        _save_token(token_val)
-        st.query_params.clear()
-        st.rerun()
+    for attempt in range(12):  # Try for up to 48 seconds
+        try:
+            resp = requests.get(health_url, timeout=5)
+            if resp.status_code == 200:
+                return True
+        except Exception:
+            pass
+        time.sleep(4)
+        
+    return False
 
+def check_auth():
     if "token" not in st.session_state or not st.session_state.token:
         st.session_state.token = _load_token()
 
     if st.session_state.token:
         return True
-
-    if "woke_up" not in st.session_state:
-        st.session_state.woke_up = True
-        threading.Thread(target=_ping_backend_background, daemon=True).start()
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown(
@@ -155,8 +88,39 @@ def check_auth():
                     if not username or not password:
                         st.error("Please enter both username and password.")
                     else:
-                        st.info("🚀 Authenticating...")
-                        _client_side_auth(f"{API_BASE_URL}/auth/login", {"username": username, "password": password}, "login")
+                        status_placeholder = st.empty()
+                        
+                        # 1. Ensure server is awake before hitting auth
+                        is_awake = _wake_up_server(status_placeholder)
+                        if not is_awake:
+                            status_placeholder.error("❌ Server took too long to wake up. Please try again.")
+                            st.stop()
+
+                        # 2. Perform Login Request
+                        status_placeholder.info("🚀 Authenticating...")
+                        try:
+                            resp = requests.post(
+                                f"{API_BASE_URL}/auth/login",
+                                json={"username": username, "password": password},
+                                timeout=15
+                            )
+                            status_placeholder.empty()
+
+                            if resp.status_code == 200:
+                                token = resp.json().get("access_token")
+                                if token:
+                                    st.session_state.token = token
+                                    _save_token(token)
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Authentication error: Token missing from response.")
+                            else:
+                                data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+                                detail = data.get("detail", f"Login failed (status {resp.status_code}).")
+                                st.error(f"❌ {detail}")
+                        except Exception as e:
+                            status_placeholder.empty()
+                            st.error(f"❌ Connection error: {e}")
 
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -169,8 +133,38 @@ def check_auth():
                     if not new_username or not new_password:
                         st.error("Please choose a username and password.")
                     else:
-                        st.info("🚀 Registering...")
-                        _client_side_auth(f"{API_BASE_URL}/auth/register", {"username": new_username, "password": new_password}, "registration")
+                        status_placeholder = st.empty()
+                        
+                        is_awake = _wake_up_server(status_placeholder)
+                        if not is_awake:
+                            status_placeholder.error("❌ Server took too long to wake up. Please try again.")
+                            st.stop()
+
+                        status_placeholder.info("🚀 Registering account...")
+                        try:
+                            resp = requests.post(
+                                f"{API_BASE_URL}/auth/register",
+                                json={"username": new_username, "password": new_password},
+                                timeout=15
+                            )
+                            status_placeholder.empty()
+
+                            if resp.status_code == 200:
+                                token = resp.json().get("access_token")
+                                if token:
+                                    st.session_state.token = token
+                                    _save_token(token)
+                                    st.success("Account created! Logging you in...")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ Registration error: Token missing from response.")
+                            else:
+                                data = resp.json() if "application/json" in resp.headers.get("content-type", "") else {}
+                                detail = data.get("detail", f"Registration failed (status {resp.status_code}).")
+                                st.error(f"❌ {detail}")
+                        except Exception as e:
+                            status_placeholder.empty()
+                            st.error(f"❌ Connection error: {e}")
 
     st.stop()
 
@@ -180,5 +174,4 @@ def get_auth_headers():
 def logout():
     st.session_state.token = None
     _clear_token()
-    st.query_params.clear()
     st.rerun()
