@@ -40,64 +40,73 @@ def _ping_backend_background():
         )
     except Exception:
         pass
-
 def _client_side_auth(endpoint_url: str, payload: dict, action_name: str):
-    """Executes authentication from the user's browser to bypass Render 429 errors."""
+    """Executes authentication with an automatic retry loop to survive Render cold starts."""
     component_id = f"auth_fetch_{abs(hash(endpoint_url + action_name))}"
     payload_json_str = json.dumps(payload)
 
     html_code = f"""
         <div id="status-{component_id}" style="font-family: sans-serif; font-size: 0.9rem; color: #334155; padding: 4px 0;">
-            ⏳ Connecting to server (this may take up to a minute if waking up)...
+            ⏳ Connecting to server...
         </div>
         <script>
         async function performAuth() {{
             const statusEl = document.getElementById("status-{component_id}");
-            try {{
-                const response = await fetch("{endpoint_url}", {{
-                    method: "POST",
-                    headers: {{
-                        "Content-Type": "application/json",
-                        "Accept": "application/json"
-                    }},
-                    body: JSON.stringify({payload_json_str})
-                }});
-
-                let data = {{}};
+            let attempts = 15; // Try up to 15 times (60 seconds)
+            
+            while (attempts > 0) {{
                 try {{
-                    data = await response.json();
-                }} catch (e) {{
-                    console.log("Response was not JSON");
-                }}
+                    const response = await fetch("{endpoint_url}", {{
+                        method: "POST",
+                        headers: {{
+                            "Content-Type": "application/json",
+                            "Accept": "application/json"
+                        }},
+                        body: JSON.stringify({payload_json_str})
+                    }});
 
-                if (response.ok) {{
-                    const token = data.access_token || data.token;
-                    if (token) {{
-                        statusEl.innerHTML = "✅ Success! Redirecting...";
-                        const currentUrl = new URL(window.parent.location.href);
-                        currentUrl.searchParams.set("client_token", token);
-                        window.parent.location.href = currentUrl.toString();
+                    let data = {{}};
+                    try {{
+                        data = await response.json();
+                    }} catch (e) {{}}
+
+                    if (response.ok) {{
+                        const token = data.access_token || data.token;
+                        if (token) {{
+                            statusEl.innerHTML = "✅ Success! Redirecting...";
+                            const currentUrl = new URL(window.parent.location.href);
+                            currentUrl.searchParams.set("client_token", token);
+                            window.parent.location.href = currentUrl.toString();
+                        }} else {{
+                            statusEl.innerHTML = "❌ Error: Token missing.";
+                            statusEl.style.color = "#dc2626";
+                        }}
                     }} else {{
-                        statusEl.innerHTML = "❌ Error: Token missing.";
+                        let errorMsg = data.detail || data.message || "Authentication failed.";
+                        if (typeof errorMsg === 'object') errorMsg = JSON.stringify(errorMsg);
+                        statusEl.innerHTML = "❌ " + errorMsg;
                         statusEl.style.color = "#dc2626";
                     }}
-                }} else {{
-                    let errorMsg = data.detail || data.message || "Authentication failed.";
-                    if (typeof errorMsg === 'object') errorMsg = JSON.stringify(errorMsg);
-                    statusEl.innerHTML = "❌ " + errorMsg;
-                    statusEl.style.color = "#dc2626";
+                    return; // The server responded, so we exit the loop!
+                    
+                }} catch (err) {{
+                    attempts--;
+                    if (attempts === 0) {{
+                        statusEl.innerHTML = "❌ Network error: Server is offline.";
+                        statusEl.style.color = "#dc2626";
+                        return;
+                    }}
+                    // If network fails, update text and wait 4 seconds before trying again
+                    statusEl.innerHTML = "⏳ Server is waking up... retrying (" + attempts + " attempts left)";
+                    await new Promise(r => setTimeout(r, 4000)); 
                 }}
-            }} catch (err) {{
-                console.error(err);
-                statusEl.innerHTML = "❌ Network error: Could not reach server.";
-                statusEl.style.color = "#dc2626";
             }}
         }}
         performAuth();
         </script>
         """
     components.html(html_code, height=50)
-
+    
 def check_auth():
     query_params = st.query_params
     if "client_token" in query_params:
