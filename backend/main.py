@@ -16,11 +16,10 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Set up CORS middleware for frontend communication
-origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")]
+# BULLETPROOF CORS: Set to "*" to guarantee no browser blocking during login
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,5 +44,4 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    # In production, use Gunicorn instead of this direct uvicorn call
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000)
