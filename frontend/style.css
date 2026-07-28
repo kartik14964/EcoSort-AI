@@ -358,3 +358,24 @@ div[data-testid="stAlert"] {
   border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
 }
+
+/* ---------- Sidebar collapse/expand arrow ---------- */
+[data-testid="stSidebarCollapseButton"] button,
+[data-testid="collapsedControl"] button,
+[data-testid="baseButton-headerNoPadding"] {
+  color: #eaf6ee !important;
+}
+
+[data-testid="stSidebarCollapseButton"] svg,
+[data-testid="collapsedControl"] svg,
+[data-testid="baseButton-headerNoPadding"] svg {
+  fill: #eaf6ee !important;
+  color: #eaf6ee !important;
+}
+
+[data-testid="stSidebarCollapseButton"] button:hover,
+[data-testid="collapsedControl"] button:hover,
+[data-testid="baseButton-headerNoPadding"]:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-radius: 8px;
+}
