@@ -27,29 +27,38 @@ def _load_token() -> str | None:
 def _clear_token():
     if os.path.exists(TOKEN_CACHE_FILE):
         os.remove(TOKEN_CACHE_FILE)
-
 def _wake_up_server(status_placeholder):
-    """Pings the health endpoint and waits patiently for up to 72 seconds for Render to wake up."""
+    """Explicitly wakes up Render, handling cold-start SSL/TCP drops."""
     health_url = API_BASE_URL.replace("/api", "/health")
     
-    # Quick check if already awake
+    status_placeholder.info("⏳ Connecting to backend service...")
+    
+    # Try an initial quick check
     try:
-        resp = requests.get(health_url, timeout=3)
+        resp = requests.get(health_url, timeout=5)
         if resp.status_code == 200:
             return True
     except Exception:
-        pass
+        pass  # Expected if sleeping
 
-    # If sleeping, give Render plenty of time (up to 72 seconds)
-    status_placeholder.info("⏳ Server is waking up from sleep. This can take up to a minute on the free tier, please wait...")
+    status_placeholder.info("⏳ Server is waking up from sleep. This takes about 30–50 seconds...")
     
-    for attempt in range(18):  # 18 attempts * 4 seconds = 72 seconds total
+    # Render cold starts require patience with connection retries
+    for attempt in range(1, 16):  # 15 attempts * 4 seconds = 60 seconds
         try:
-            resp = requests.get(health_url, timeout=10)
+            # Using a session or clean request to clear stale socket states
+            resp = requests.get(health_url, timeout=10, headers={"Cache-Control": "no-cache"})
             if resp.status_code == 200:
                 return True
-        except Exception:
-            pass
+        except requests.exceptions.SSLError:
+            # SSL handshake failed because container is still booting its web proxy
+            logger.info("SSL handshake waiting for Render container to initialize (attempt %s)", attempt)
+        except requests.exceptions.ConnectionError:
+            # Connection refused/reset because port isn't open yet
+            logger.info("Connection waiting for Render service to bind port (attempt %s)", attempt)
+        except Exception as e:
+            logger.info("Wake-up attempt %s encountered: %s", attempt, e)
+            
         time.sleep(4)
         
     return False
