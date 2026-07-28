@@ -153,6 +153,14 @@ def check_auth():
                 password = st.text_input(
                     "Password", type="password", placeholder="••••••••"
                 )
+                components.html("""
+                    <script>
+                        setTimeout(() => {
+                            const inputs = window.parent.document.querySelectorAll('input[type="password"]');
+                            inputs.forEach(input => input.setAttribute('autocomplete', 'new-password'));
+                        }, 100);
+                    </script>
+                """, height=0)
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button(
                     "Log In to Dashboard", width="stretch"
