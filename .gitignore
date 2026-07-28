@@ -7,3 +7,5 @@ backend/uploads/*
 reports/*.pdf
 datasets/
 training/runs/
+ecosort-auth/.env
+ecosort-auth/node_modules/

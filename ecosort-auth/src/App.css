@@ -1,0 +1,83 @@
+.ec-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, #fbfefc 0%, #f4faf6 100%);
+  font-family: "Inter", sans-serif;
+}
+
+.ec-card {
+  background: #fff;
+  padding: 40px;
+  border-radius: 20px;
+  box-shadow: 0 20px 45px rgba(16, 42, 31, 0.12);
+  width: 400px;
+}
+
+.ec-title {
+  color: #103b27;
+  font-size: 1.8rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.ec-subtitle {
+  color: #5f7868;
+  margin-bottom: 24px;
+}
+
+.ec-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #dceee2;
+}
+
+.ec-tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  background: none;
+  color: #5f7868;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ec-tab-active {
+  border-bottom: 2px solid #1f9b62;
+  color: #126b44;
+}
+
+.ec-label {
+  display: block;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  color: #102a1f;
+  font-weight: 500;
+}
+
+.ec-input {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #dceee2;
+  box-sizing: border-box;
+}
+
+.ec-submit-btn {
+  width: 100%;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(120deg, #178a55, #1f9b62);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ec-error {
+  color: #df514c;
+  margin-top: 10px;
+}
