@@ -1,13 +1,19 @@
 import streamlit as st
 import requests
-from frontend.auth_utils import check_auth, get_auth_headers
 import os
 import base64
 
-# Page Setup
+# ✅ Must be first Streamlit call
 st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
 
-# CSS
+from frontend.auth_utils import check_auth, get_auth_headers
+
+# ✅ Auth check — redirects to React if no token
+check_auth()
+
+API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
+
+# Load CSS
 def load_css():
     css_file = os.path.join(os.path.dirname(__file__), "..", "style.css")
     if os.path.exists(css_file):
@@ -16,18 +22,12 @@ def load_css():
 
 load_css()
 
-# Enforce Authentication
-check_auth()
-
-API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
-
 
 def filter_by_confidence(detections, threshold):
-    """Keep the UI consistent with the selected detection control."""
     return [item for item in detections if float(item.get("confidence", 0)) >= threshold]
 
+
 def save_to_db(detections, key):
-    """Render Save button and call /detections/save on click."""
     if st.button("💾 Save to Database", key=key):
         try:
             save_resp = requests.post(
@@ -43,8 +43,8 @@ def save_to_db(detections, key):
         except Exception as e:
             st.error(f"Save error: {e}")
 
+
 def render_detections(detections, conf_thresh):
-    """Render detection cards for image/webcam results."""
     st.caption(f"Showing {len(detections)} item(s) at or above {conf_thresh:.0%} confidence.")
     if not detections:
         st.warning("No target materials identified above the threshold.")
@@ -77,16 +77,17 @@ def render_detections(detections, conf_thresh):
                     <span style="color: #10b981; font-weight: 600;">{det['carbon_saved_kg']} kg CO₂</span>
                 </div>
             </div>
-            <div style="margin-top: 16px; pt-3; border-top: 1px dashed #e2e8f0;">
+            <div style="margin-top: 16px; border-top: 1px dashed #e2e8f0;">
                 <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 6px; font-weight: 500;">Recycling Feasibility</div>
         """, unsafe_allow_html=True)
         st.progress(float(det['recycling_possibility']))
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+
 
 st.title("📷 Material Classifier & Segregator")
-st.write("Upload an image, snap a photo, or process a video file to analyze its recycling footprint.")
+st.write("Upload an image or snap a photo to analyze its recycling footprint.")
 
-# Sidebar Configuration
+# Sidebar
 st.sidebar.subheader("Detection Controls")
 
 try:
@@ -115,7 +116,6 @@ if mode == "Image Upload":
 
     if uploaded_file is not None:
         st.write("Processing image...")
-
         res_data = None
         try:
             uploaded_file.seek(0)
@@ -144,7 +144,6 @@ if mode == "Image Upload":
                     mime="image/jpeg",
                     key="download_image"
                 )
-
             with col2:
                 st.subheader("Classification & Recommendations")
                 detections = filter_by_confidence(res_data.get("detections", []), conf_thresh)
@@ -160,7 +159,6 @@ elif mode == "Webcam Snap":
 
     if webcam_img is not None:
         st.write("Analyzing camera snapshot...")
-
         res_data = None
         try:
             webcam_img.seek(0)
@@ -189,7 +187,6 @@ elif mode == "Webcam Snap":
                     mime="image/jpeg",
                     key="download_webcam"
                 )
-
             with col2:
                 st.subheader("Classification & Recommendations")
                 detections = filter_by_confidence(res_data.get("detections", []), conf_thresh)
