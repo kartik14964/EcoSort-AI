@@ -20,7 +20,12 @@ def load_css():
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
 load_css()
-
+# Hide sidebar until authenticated
+if "token" not in st.session_state or not st.session_state.token:
+    st.markdown(
+        "<style>[data-testid='stSidebar'] {display: none;}</style>",
+        unsafe_allow_html=True
+    )
 # Enforce Authentication
 check_auth()
 

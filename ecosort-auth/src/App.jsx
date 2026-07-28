@@ -11,27 +11,39 @@ function App() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [elapsed, setElapsed] = useState(0);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
+    setElapsed(0);
+
+    const timerRef = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
 
     const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
 
     try {
-      const res = await axios.post(`${BACKEND_URL}${endpoint}`, {
-        username,
-        password,
-      });
+      const res = await axios.post(
+        `${BACKEND_URL}${endpoint}`,
+        {
+          username,
+          password,
+        },
+        { timeout: 120000 },
+      );
       const token = res.data.access_token;
       window.location.href = `${DASHBOARD_URL}/?token=${encodeURIComponent(token)}`;
     } catch (err) {
       setLoading(false);
       setError(
         err.response?.data?.detail ||
-          (mode === "login" ? "Login failed." : "Registration failed.")
+          (mode === "login" ? "Login failed." : "Registration failed."),
       );
+    } finally {
+      clearInterval(timerRef);
     }
   };
 
@@ -44,13 +56,19 @@ function App() {
         <div className="ec-tabs">
           <button
             className={mode === "login" ? "ec-tab ec-tab-active" : "ec-tab"}
-            onClick={() => { setMode("login"); setError(""); }}
+            onClick={() => {
+              setMode("login");
+              setError("");
+            }}
           >
             Log In
           </button>
           <button
             className={mode === "register" ? "ec-tab ec-tab-active" : "ec-tab"}
-            onClick={() => { setMode("register"); setError(""); }}
+            onClick={() => {
+              setMode("register");
+              setError("");
+            }}
           >
             Create Account
           </button>
@@ -73,7 +91,9 @@ function App() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            autoComplete={
+              mode === "login" ? "current-password" : "new-password"
+            }
             required
           />
 
@@ -83,9 +103,16 @@ function App() {
             {loading
               ? "Connecting..."
               : mode === "login"
-              ? "Log In to Dashboard"
-              : "Register New Account"}
+                ? "Log In to Dashboard"
+                : "Register New Account"}
           </button>
+
+          {loading && (
+            <div className="ec-waking-msg">
+              ⏳ The server may be waking up from sleep — this can take up to a
+              minute. Please don't close this page. ({elapsed}s elapsed)
+            </div>
+          )}
         </form>
       </div>
     </div>

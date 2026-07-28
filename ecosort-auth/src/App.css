@@ -81,3 +81,10 @@
   color: #df514c;
   margin-top: 10px;
 }
+.ec-waking-msg {
+  margin-top: 12px;
+  font-size: 0.85rem;
+  color: #5f7868;
+  text-align: center;
+  line-height: 1.5;
+}
