@@ -76,7 +76,7 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.markdown(f"""
     <div class="pro-card">
-        <div class="metric-title">Today's Scans</div>
+        <div class="metric-title">Last 30 Days</div>
         <div class="metric-value">{summary['total_detections']}</div>
         <div class="metric-subtitle">Total waste items identified</div>
     </div>
