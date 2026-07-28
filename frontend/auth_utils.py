@@ -4,6 +4,7 @@ import os
 import time
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
@@ -42,16 +43,15 @@ def _post_with_retry(
     status_placeholder,
     total_budget: int = WAKE_TOTAL_BUDGET_SECONDS,
 ):
-    """POST with exponential backoff to survive a cold-starting backend.
+    """POST with backoff to survive a cold-starting backend.
 
-    By using longer wait periods between retries (15s, 30s, 60s), we prevent
-    flooding Render/Cloudflare edge proxies with rapid requests, avoiding HTTP
-    429 errors while waiting for the server to wake up.
+    Longer wait periods between retries help avoid flooding Render/Cloudflare
+    edge proxies with rapid requests, which can trigger HTTP 429 while the
+    server wakes up.
     """
     start = time.monotonic()
     attempt = 0
-    # Start with a 15s wait to avoid rapid-fire polling on sleeping servers
-    wait = 15
+    wait = 15  # 15s -> 30s -> 60s
     last_error = None
 
     while time.monotonic() - start < total_budget:
@@ -83,10 +83,9 @@ def _post_with_retry(
                 wait,
             )
             time.sleep(wait)
-            wait = min(wait * 2, 60)  # Exponential backoff: 15s -> 30s -> 60s
+            wait = min(wait * 2, 60)
             continue
 
-        # Handle rate limiting (429) or transient gateway errors during wake-up
         if resp.status_code == 429 or resp.status_code in (502, 503, 504):
             last_error = f"HTTP {resp.status_code}"
             logger.warning(
@@ -96,7 +95,7 @@ def _post_with_retry(
                 wait,
             )
             time.sleep(wait)
-            wait = min(wait * 2, 60)  # Exponential backoff on rate limits
+            wait = min(wait * 2, 60)
             continue
 
         return resp, None
@@ -118,6 +117,16 @@ def check_auth():
 
     if st.session_state.token:
         return True
+
+    # Ping the backend from the USER'S BROWSER (a clean residential IP),
+    # not from Render's own network. This wakes a sleeping backend without
+    # tripping Cloudflare's edge protection on Render's outbound NAT IP.
+    components.html("""
+        <script>
+            fetch("https://ecosort-backend-yz6m.onrender.com/health", { mode: 'no-cors' })
+                .catch(() => {});
+        </script>
+    """, height=0)
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown(
