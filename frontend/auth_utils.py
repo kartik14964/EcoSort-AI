@@ -120,10 +120,9 @@ def check_auth():
                                 "Unexpected response from server. Please try again."
                             )
                     elif resp.status_code == 429:
-                        st.warning(
-                            "The backend is currently starting or temporarily rate-limited. "
-                            "Please wait 30-60 seconds and try again."
-                        )
+                        st.error(f"429 Response:\n\n{resp.text}")
+                        logger.warning("429 Headers: %s", resp.headers)
+                        logger.warning("429 Body: %s", resp.text)
                     else:
                         content_type = resp.headers.get("content-type", "")
                         if "application/json" in content_type:
