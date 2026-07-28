@@ -1,18 +1,17 @@
-import streamlit as st
-import requests
-import os
 import json
 import logging
+import os
 import time
+import requests
+import streamlit as st
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
-# Render free-tier cold starts commonly take 30-60s. Retry on a time
-# budget instead of a fixed attempt count, so we don't give up right
-# before the backend finishes booting.
-WAKE_TOTAL_BUDGET_SECONDS = 150
-REQUEST_TIMEOUT_SECONDS = 70
+# Render free-tier cold starts commonly take 30-60s. We set a overall budget
+# of 180s to allow the backend plenty of time to boot and load ML models.
+WAKE_TOTAL_BUDGET_SECONDS = 180
+REQUEST_TIMEOUT_SECONDS = 75
 
 logger = logging.getLogger(__name__)
 
@@ -37,16 +36,22 @@ def _clear_token():
         os.remove(TOKEN_CACHE_FILE)
 
 
-def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: int = WAKE_TOTAL_BUDGET_SECONDS):
-    """
-    POST with retries to survive a cold-starting backend.
-    A single request naturally waits through the cold start (proven via
-    curl: ~42-50s). We only retry if that single attempt genuinely fails
-    (connection error, 429, or 502/503/504), not as a matter of course.
+def _post_with_retry(
+    url: str,
+    payload: dict,
+    status_placeholder,
+    total_budget: int = WAKE_TOTAL_BUDGET_SECONDS,
+):
+    """POST with exponential backoff to survive a cold-starting backend.
+
+    By using longer wait periods between retries (15s, 30s, 60s), we prevent
+    flooding Render/Cloudflare edge proxies with rapid requests, avoiding HTTP
+    429 errors while waiting for the server to wake up.
     """
     start = time.monotonic()
     attempt = 0
-    wait = 5
+    # Start with a 15s wait to avoid rapid-fire polling on sleeping servers
+    wait = 15
     last_error = None
 
     while time.monotonic() - start < total_budget:
@@ -54,33 +59,57 @@ def _post_with_retry(url: str, payload: dict, status_placeholder, total_budget: 
 
         if attempt > 1:
             elapsed = int(time.monotonic() - start)
-            status_placeholder.info(f"⏳ Server is waking up, please wait... ({elapsed}s elapsed)")
+            status_placeholder.info(
+                f"⏳ Server is waking up, please wait... ({elapsed}s elapsed)"
+            )
 
         try:
             request_started = time.monotonic()
-            resp = requests.post(url, json=payload, timeout=(15, REQUEST_TIMEOUT_SECONDS))
+            resp = requests.post(
+                url, json=payload, timeout=(15, REQUEST_TIMEOUT_SECONDS)
+            )
             logger.info(
                 "Auth request attempt %s completed in %.1fs with status %s",
-                attempt, time.monotonic() - request_started, resp.status_code,
+                attempt,
+                time.monotonic() - request_started,
+                resp.status_code,
             )
         except requests.exceptions.RequestException as exc:
             last_error = f"{type(exc).__name__}: {exc}"
-            logger.warning("Auth request attempt %s failed: %s", attempt, last_error)
+            logger.warning(
+                "Auth request attempt %s failed: %s. Backing off for %ss...",
+                attempt,
+                last_error,
+                wait,
+            )
             time.sleep(wait)
-            wait = min(wait + 2, 10)
+            wait = min(wait * 2, 60)  # Exponential backoff: 15s -> 30s -> 60s
             continue
 
+        # Handle rate limiting (429) or transient gateway errors during wake-up
         if resp.status_code == 429 or resp.status_code in (502, 503, 504):
             last_error = f"HTTP {resp.status_code}"
-            logger.warning("Auth request attempt %s got retryable status %s, retrying...", attempt, resp.status_code)
+            logger.warning(
+                "Auth request attempt %s got status %s, backing off for %ss...",
+                attempt,
+                resp.status_code,
+                wait,
+            )
             time.sleep(wait)
-            wait = min(wait + 2, 10)
+            wait = min(wait * 2, 60)  # Exponential backoff on rate limits
             continue
 
         return resp, None
 
-    logger.error("Auth request exhausted its %ss budget; last error: %s", total_budget, last_error)
-    return None, "The server is taking longer than usual to respond. Please try again in a moment."
+    logger.error(
+        "Auth request exhausted its %ss budget; last error: %s",
+        total_budget,
+        last_error,
+    )
+    return (
+        None,
+        "The server is taking longer than usual to respond. Please try again in a moment.",
+    )
 
 
 def check_auth():
@@ -91,8 +120,16 @@ def check_auth():
         return True
 
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; color: #0f172a; font-weight: 700; letter-spacing: -1px;'>EcoSort Secure Gateway</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #64748b; font-size: 1.1rem;'>Your private sustainability dashboard.</p>", unsafe_allow_html=True)
+    st.markdown(
+        "<h1 style='text-align: center; color: #0f172a; font-weight: 700;"
+        " letter-spacing: -1px;'>EcoSort Secure Gateway</h1>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        "<p style='text-align: center; color: #64748b; font-size:"
+        " 1.1rem;'>Your private sustainability dashboard.</p>",
+        unsafe_allow_html=True,
+    )
     st.markdown("<br>", unsafe_allow_html=True)
 
     _, col2, _ = st.columns([1, 1.5, 1])
@@ -104,17 +141,23 @@ def check_auth():
             st.markdown("<br>", unsafe_allow_html=True)
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="e.g. admin")
-                password = st.text_input("Password", type="password", placeholder="••••••••")
+                password = st.text_input(
+                    "Password", type="password", placeholder="••••••••"
+                )
                 st.markdown("<br>", unsafe_allow_html=True)
-                submit = st.form_submit_button("Log In to Dashboard", width="stretch")
+                submit = st.form_submit_button(
+                    "Log In to Dashboard", width="stretch"
+                )
 
                 if submit:
                     status_placeholder = st.empty()
-                    status_placeholder.info("⏳ Connecting to server...")
+                    status_placeholder.info(
+                        "⏳ Server is starting up, please wait..."
+                    )
                     resp, err = _post_with_retry(
                         f"{API_BASE_URL}/auth/login",
                         {"username": username, "password": password},
-                        status_placeholder
+                        status_placeholder,
                     )
                     status_placeholder.empty()
 
@@ -127,7 +170,10 @@ def check_auth():
                             _save_token(token)
                             st.rerun()
                         except (ValueError, KeyError):
-                            st.error("Unexpected response from server. Please try again.")
+                            st.error(
+                                "Unexpected response from server. Please try"
+                                " again."
+                            )
                     else:
                         content_type = resp.headers.get("content-type", "")
                         if "application/json" in content_type:
@@ -139,18 +185,26 @@ def check_auth():
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
             with st.form("register_form"):
-                new_username = st.text_input("Choose Username", placeholder="e.g. jane_doe")
-                new_password = st.text_input("Choose Password", type="password", placeholder="••••••••")
+                new_username = st.text_input(
+                    "Choose Username", placeholder="e.g. jane_doe"
+                )
+                new_password = st.text_input(
+                    "Choose Password", type="password", placeholder="••••••••"
+                )
                 st.markdown("<br>", unsafe_allow_html=True)
-                submit_reg = st.form_submit_button("Register New Account", width="stretch")
+                submit_reg = st.form_submit_button(
+                    "Register New Account", width="stretch"
+                )
 
                 if submit_reg:
                     status_placeholder = st.empty()
-                    status_placeholder.info("⏳ Connecting to server...")
+                    status_placeholder.info(
+                        "⏳ Server is starting up, please wait..."
+                    )
                     resp, err = _post_with_retry(
                         f"{API_BASE_URL}/auth/register",
                         {"username": new_username, "password": new_password},
-                        status_placeholder
+                        status_placeholder,
                     )
                     status_placeholder.empty()
 
@@ -161,14 +215,21 @@ def check_auth():
                             token = resp.json()["access_token"]
                             st.session_state.token = token
                             _save_token(token)
-                            st.success("Registration successful! Logging you in...")
+                            st.success(
+                                "Registration successful! Logging you in..."
+                            )
                             st.rerun()
                         except (ValueError, KeyError):
-                            st.error("Unexpected response from server. Please try again.")
+                            st.error(
+                                "Unexpected response from server. Please try"
+                                " again."
+                            )
                     else:
                         content_type = resp.headers.get("content-type", "")
                         if "application/json" in content_type:
-                            detail = resp.json().get("detail", "Registration failed.")
+                            detail = resp.json().get(
+                                "detail", "Registration failed."
+                            )
                         else:
                             detail = f"Registration failed (status {resp.status_code}). Please try again."
                         st.error(detail)
@@ -177,7 +238,11 @@ def check_auth():
 
 
 def get_auth_headers():
-    return {"Authorization": f"Bearer {st.session_state.token}"} if st.session_state.token else {}
+    return (
+        {"Authorization": f"Bearer {st.session_state.token}"}
+        if st.session_state.token
+        else {}
+    )
 
 
 def logout():
