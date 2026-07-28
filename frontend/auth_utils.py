@@ -9,6 +9,7 @@ API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
 
 REQUEST_TIMEOUT_SECONDS = 90
+BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,11 @@ def _clear_token():
 def _ping_backend_background():
     """Fires a non-blocking background request to wake up the Render service immediately on app load."""
     try:
-        requests.get("https://ecosort-backend-yz6m.onrender.com/health", timeout=3)
+        requests.get(
+            "https://ecosort-backend-yz6m.onrender.com/health",
+            headers=BROWSER_HEADERS,
+            timeout=3,
+        )
     except Exception:
         pass
 
@@ -45,7 +50,9 @@ def _post_once(url: str, payload: dict, status_placeholder, timeout: int = REQUE
     """Send exactly one request. No retries, no backoff — if it fails, it fails."""
     status_placeholder.info("⏳ Connecting to server, please wait...")
     try:
-        resp = requests.post(url, json=payload, timeout=(15, timeout))
+        resp = requests.post(
+            url, json=payload, headers=BROWSER_HEADERS, timeout=(15, timeout)
+        )
         logger.info("Auth request completed with status %s", resp.status_code)
         return resp, None
     except requests.exceptions.RequestException as exc:
@@ -88,7 +95,7 @@ def check_auth():
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="e.g. admin")
                 password = st.text_input(
-                    "Password", type="password", placeholder="••••••••"
+                    "Password", type="password", placeholder="••••••••",autocomplete="off"
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button(
