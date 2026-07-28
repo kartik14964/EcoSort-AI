@@ -4,6 +4,7 @@ import os
 import threading
 import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 API_BASE_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 TOKEN_CACHE_FILE = os.path.join(os.path.expanduser("~"), ".ecosort_token")
@@ -46,21 +47,74 @@ def _ping_backend_background():
         pass
 
 
-def _post_once(url: str, payload: dict, status_placeholder, timeout: int = REQUEST_TIMEOUT_SECONDS):
-    """Send exactly one request. No retries, no backoff — if it fails, it fails."""
-    status_placeholder.info("⏳ Connecting to server, please wait...")
-    try:
-        resp = requests.post(
-            url, json=payload, headers=BROWSER_HEADERS, timeout=(15, timeout)
-        )
-        logger.info("Auth request completed with status %s", resp.status_code)
-        return resp, None
-    except requests.exceptions.RequestException as exc:
-        logger.warning("Auth request failed: %s", exc)
-        return None, f"Could not reach the server: {exc}"
+def _client_side_auth(endpoint_url: str, payload: dict, action_name: str, placeholder):
+    """Executes authentication fetch() directly from the user's browser using JavaScript,
+    bypassing Render server-side IP blocks (429 Too Many Requests) and utilizing the visitor's clean IP.
+    """
+    component_id = f"auth_fetch_{abs(hash(endpoint_url + action_name))}"
+    
+    # Clean JSON payload string for JS injection
+    payload_json = json.dumps(payload)
+    
+    html_code = f"""
+    <div id="{component_id}" style="font-family: sans-serif; color: #475569; padding: 10px 0;">
+        <p id="status-{component_id}" style="font-weight: 500; font-size: 0.95rem; margin: 0;">⏳ Processing {action_name}...</p>
+    </div>
+    <script>
+    async function performAuth() {{
+        const statusEl = document.getElementById("status-{component_id}");
+        try {{
+            const response = await fetch("{endpoint_url}", {{
+                method: "POST",
+                headers: {{
+                    "Content-Type": "application/json",
+                    "Accept": "application/json"
+                }},
+                body: {payload_json}
+            }});
+            
+            const data = await response.json();
+            
+            if (response.ok) {{
+                statusEl.innerHTML = "✅ Success! Redirecting...";
+                // Send token back to Streamlit via URL parameters and trigger top-level refresh
+                const token = data.access_token || data.token;
+                if (token) {{
+                    const currentUrl = new URL(window.parent.location.href);
+                    currentUrl.searchParams.set("client_token", token);
+                    window.parent.location.href = currentUrl.toString();
+                }} else {{
+                    statusEl.innerHTML = "❌ Error: Token missing in response.";
+                    statusEl.style.color = "#dc2626";
+                }}
+            }} else {{
+                statusEl.innerHTML = "❌ " + (data.detail || data.message || "{action_name} failed.");
+                statusEl.style.color = "#dc2626";
+            }}
+        }} catch (err) {{
+            statusEl.innerHTML = "❌ Network error: Could not connect to server.";
+            statusEl.style.color = "#dc2626";
+        }}
+    }}
+    performAuth();
+    </script>
+    """
+    components.html(html_code, height=60)
 
 
 def check_auth():
+    # Capture token if passed back from browser client-side fetch script via URL query param
+    query_params = st.query_params
+    if "client_token" in query_params:
+        token_val = query_params["client_token"]
+        if isinstance(token_val, list):
+            token_val = token_val[0]
+        st.session_state.token = token_val
+        _save_token(token_val)
+        # Clear query params from URL cleanly
+        st.query_params.clear()
+        st.rerun()
+
     if "token" not in st.session_state or not st.session_state.token:
         st.session_state.token = _load_token()
 
@@ -95,7 +149,7 @@ def check_auth():
             with st.form("login_form"):
                 username = st.text_input("Username", placeholder="e.g. admin")
                 password = st.text_input(
-                    "Password", type="password", placeholder="••••••••",autocomplete="off"
+                    "Password", type="password", placeholder="••••••••", autocomplete="off"
                 )
                 st.markdown("<br>", unsafe_allow_html=True)
                 submit = st.form_submit_button(
@@ -103,33 +157,17 @@ def check_auth():
                 )
 
                 if submit:
-                    status_placeholder = st.empty()
-                    resp, err = _post_once(
-                        f"{API_BASE_URL}/auth/login",
-                        {"username": username, "password": password},
-                        status_placeholder,
-                    )
-                    status_placeholder.empty()
-
-                    if err:
-                        st.error(err)
-                    elif resp.status_code == 200:
-                        try:
-                            token = resp.json()["access_token"]
-                            st.session_state.token = token
-                            _save_token(token)
-                            st.rerun()
-                        except (ValueError, KeyError):
-                            st.error(
-                                "Unexpected response from server. Please try again."
-                            )
+                    if not username or not password:
+                        st.error("Please enter both username and password.")
                     else:
-                        content_type = resp.headers.get("content-type", "")
-                        if "application/json" in content_type:
-                            detail = resp.json().get("detail", "Login failed.")
-                        else:
-                            detail = f"Login failed (status {resp.status_code}). Please try again."
-                        st.error(detail)
+                        status_placeholder = st.empty()
+                        status_placeholder.info("🚀 Initiating secure client-side login...")
+                        _client_side_auth(
+                            f"{API_BASE_URL}/auth/login",
+                            {"username": username, "password": password},
+                            "login",
+                            status_placeholder,
+                        )
 
         with tab2:
             st.markdown("<br>", unsafe_allow_html=True)
@@ -146,38 +184,17 @@ def check_auth():
                 )
 
                 if submit_reg:
-                    status_placeholder = st.empty()
-                    resp, err = _post_once(
-                        f"{API_BASE_URL}/auth/register",
-                        {"username": new_username, "password": new_password},
-                        status_placeholder,
-                    )
-                    status_placeholder.empty()
-
-                    if err:
-                        st.error(err)
-                    elif resp.status_code == 200:
-                        try:
-                            token = resp.json()["access_token"]
-                            st.session_state.token = token
-                            _save_token(token)
-                            st.success(
-                                "Registration successful! Logging you in..."
-                            )
-                            st.rerun()
-                        except (ValueError, KeyError):
-                            st.error(
-                                "Unexpected response from server. Please try again."
-                            )
+                    if not new_username or not new_password:
+                        st.error("Please choose a username and password.")
                     else:
-                        content_type = resp.headers.get("content-type", "")
-                        if "application/json" in content_type:
-                            detail = resp.json().get(
-                                "detail", "Registration failed."
-                            )
-                        else:
-                            detail = f"Registration failed (status {resp.status_code}). Please try again."
-                        st.error(detail)
+                        status_placeholder = st.empty()
+                        status_placeholder.info("🚀 Initiating secure client-side registration...")
+                        _client_side_auth(
+                            f"{API_BASE_URL}/auth/register",
+                            {"username": new_username, "password": new_password},
+                            "registration",
+                            status_placeholder,
+                        )
 
     st.stop()
 
@@ -193,4 +210,5 @@ def get_auth_headers():
 def logout():
     st.session_state.token = None
     _clear_token()
+    st.query_params.clear()
     st.rerun()
