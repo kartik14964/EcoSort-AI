@@ -73,10 +73,10 @@ function App() {
             Create Account
           </button>
         </div>
-
         <form onSubmit={handleSubmit}>
           <label className="ec-label">Username</label>
           <input
+            key={`username-${mode}`}
             className="ec-input"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -85,17 +85,32 @@ function App() {
           />
 
           <label className="ec-label">Password</label>
-          <input
-            className="ec-input"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete={
-              mode === "login" ? "current-password" : "new-password"
-            }
-            required
-          />
+
+          {mode === "login" ? (
+            <input
+              key="password-login"
+              className="ec-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+            />
+          ) : (
+            <input
+              key="password-register"
+              className="ec-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="new-password"
+              required
+            />
+          )}
+
+          {/* rest stays the same */}
 
           {error && <div className="ec-error">{error}</div>}
 
