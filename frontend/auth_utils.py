@@ -60,7 +60,7 @@ def _client_side_auth(endpoint_url: str, payload: dict, action_name: str):
                         "Content-Type": "application/json",
                         "Accept": "application/json"
                     }},
-                    body: {payload_json_str}
+                    body: JSON.stringify({payload_json_str})
                 }});
 
                 let data = {{}};
