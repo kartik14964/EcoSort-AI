@@ -29,7 +29,7 @@ def _clear_token():
         os.remove(TOKEN_CACHE_FILE)
 
 def _wake_up_server(status_placeholder):
-    """Pings the health endpoint to wake up Render cleanly with user feedback."""
+    """Pings the health endpoint and waits patiently for up to 72 seconds for Render to wake up."""
     health_url = API_BASE_URL.replace("/api", "/health")
     
     # Quick check if already awake
@@ -40,12 +40,12 @@ def _wake_up_server(status_placeholder):
     except Exception:
         pass
 
-    # If sleeping, show a friendly status and wait for it to boot
-    status_placeholder.info("⏳ Waking up secure server from sleep (this takes about 30 seconds)...")
+    # If sleeping, give Render plenty of time (up to 72 seconds)
+    status_placeholder.info("⏳ Server is waking up from sleep. This can take up to a minute on the free tier, please wait...")
     
-    for attempt in range(12):  # Try for up to 48 seconds
+    for attempt in range(18):  # 18 attempts * 4 seconds = 72 seconds total
         try:
-            resp = requests.get(health_url, timeout=5)
+            resp = requests.get(health_url, timeout=10)
             if resp.status_code == 200:
                 return True
         except Exception:
