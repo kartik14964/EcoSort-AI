@@ -155,10 +155,18 @@ def check_auth():
                 )
                 components.html("""
                     <script>
-                        setTimeout(() => {
+                        function disableSuggestion() {
                             const inputs = window.parent.document.querySelectorAll('input[type="password"]');
-                            inputs.forEach(input => input.setAttribute('autocomplete', 'new-password'));
-                        }, 100);
+                            inputs.forEach(input => {
+                                input.setAttribute('autocomplete', 'new-password');
+                                input.setAttribute('data-lpignore', 'true');
+                                input.setAttribute('data-1p-ignore', 'true');
+                            });
+                        }
+                        disableSuggestion();
+                        const observer = new MutationObserver(disableSuggestion);
+                        observer.observe(window.parent.document.body, { childList: true, subtree: true });
+                        setTimeout(() => observer.disconnect(), 5000);
                     </script>
                 """, height=0)
                 st.markdown("<br>", unsafe_allow_html=True)
