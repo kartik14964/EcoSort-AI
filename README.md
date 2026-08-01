@@ -1,122 +1,192 @@
 # ♻️ EcoSort AI: Intelligent Waste Segregation & Sustainability Analytics Platform
 
-EcoSort AI is a full-stack, production-grade Computer Vision and ESG compliance platform designed to detect waste streams in real time. The platform classifies objects into disposal categories, provides instant segregation recommendations, calculates carbon footprint offsets, and builds compliance-ready PDF reports.
-
-## 🚀 Key Features
-
-1. **Real-time Detection & Inference**: Processes live video feeds, uploaded images, and video files to label items with bounding boxes and confidence parameters.
-2. **Disposal Recommendation Engine**: Delivers material-specific guidelines (e.g., rinse instructions, bin color assignments, scrap metal drop-off directions).
-3. **ESG & Sustainability Analytics**: Aggregates statistics for total scanned items, recycling percentage, and carbon reduction metrics.
-4. **Interactive BI Dashboard**: Features custom Plotly visualization panels for daily volume metrics, material composition shares, and cumulative carbon savings.
-5. **AI Sustainability Assistant**: Contains an analytical chatbot that queries database history to answer natural language queries (e.g., *"How much plastic did we save this week?"*).
-6. **Robust Offline Capability**: Features an automatic fallback to an embedded local JSON database if MongoDB is unreachable, making it highly portable.
+EcoSort AI is a full-stack waste classification, recommendation, and sustainability metrics platform. It leverages a fine-tuned computer vision model quantized for CPU execution, a large multimodal AI model fallback for low-confidence detections, and custom dashboards to track compliance-ready ESG analytics.
 
 ---
 
-## 🏗️ Software Architecture
+## 🏗️ System Architecture & Data Flow
 
-The platform follows clean, decoupled architectural patterns:
+EcoSort features a hybrid architecture separating authorization concerns, backend business logic, AI inference, and interactive reporting:
+
+```
+                            ┌────────────────────────┐
+                            │    Vite + React SPA    │  (Login Gateway - Port 5173)
+                            │   (ecosort-auth)       │
+                            └───────────┬────────────┘
+                                        │ JWT Redirect (?token=...)
+                                        ▼
+┌───────────────────────────────────────────────────────────────────────────────┐
+│                          FastAPI Web Backend                     (Port 8000)  │
+│                                                                               │
+│   ┌────────────────────┐      ┌─────────────────────┐      ┌──────────────┐   │
+│   │    Auth Router     ├─────►│  Database Connector ├─────►│ MongoDB Atlas│   │
+│   │   (PyJWT/Bcrypt)   │      │ (Lazy PyMongo Repo) │      └──────────────┘   │
+│   └────────────────────┘      └──────────▲──────────┘                         │
+│                                          │                                    │
+│   ┌────────────────────┐                 │                                    │
+│   │     API Router     ├─────────────────┘                                    │
+│   │ (Detection/Reports)│                                                      │
+│   └──────────┬─────────┘                                                      │
+│              │                                                                │
+│              ▼                                                                │
+│   ┌────────────────────────────────────────────────────────┐                  │
+│   │                    AI Inference System                 │                  │
+│   │                                                        │                  │
+│   │  ┌───────────────────────┐      ┌───────────────────┐  │                  │
+│   │  │     ONNX Runtime      │      │  Groq Vision API  │  │                  │
+│   │  │ (YOLOv8 INT8, CPU)    ├─────►│ (Fallback LMM)    │  │                  │
+│   │  └───────────────────────┘      └───────────────────┘  │                  │
+│   └────────────────────────────────────────────────────────┘                  │
+└──────────────────────────────────────▲────────────────────────────────────────┘
+                                       │ HTTP REST Requests
+                                       │ (Bearer Authentication)
+                            ┌──────────┴────────────┐
+                            │  Streamlit Dashboard  │  (Dashboard Pages - Port 8501)
+                            │  (frontend/Home.py)   │
+                            └───────────────────────┘
+```
+
+### Flow of Operations:
+1. **User Authentication**: Users land on the **React Portal** (`ecosort-auth`), register/login, obtain a JWT, and are redirected to the **Streamlit Dashboard** with the token in the URL.
+2. **Inference Pipeline**: Users upload an image or capture a webcam photo. The Streamlit server forwards the frame to the `/api/detect/image` backend.
+3. **Dual-Model Inference**:
+   * The **ONNX Engine** runs a CPU-quantized YOLOv8 object detector (`best_int8.onnx`).
+   * If YOLO detects nothing or falls below `50%` confidence, the backend invokes the **Groq Vision Fallback** (`qwen/qwen3.6-27b`) to categorize the waste item.
+4. **Data Aggregation**: Detections can be manually saved to **MongoDB** to compute real-time recycling rates and CO₂ metrics.
+5. **Compliance Reporting**: Dynamic PDFs are generated via **ReportLab** incorporating cumulative carbon savings projections.
+
+---
+
+## 📁 Repository Structure
 
 ```
 ecosort/
-├── backend/
-│   ├── api/          # RESTful routing layers & Pydantic validation schemas
-│   ├── database/     # MongoDB connector & local database repository
-│   ├── services/     # YOLOv8 CV engine, recommendations builder, NLP chatbot
-│   ├── utils/        # System configs, structured logs, ReportLab PDF builder
-│   └── main.py       # FastAPI entrance app
-├── frontend/
-│   ├── assets/       # Custom Glassmorphism styles (style.css)
-│   ├── pages/        # Individual Streamlit pages (Detection, Analytics, History, Chat, Reports, Settings)
-│   └── Home.py       # Streamlit landing page
-├── models/           # YOLOv8 nano model location
-├── reports/          # Temporary PDF reports cache
-
-└── requirements.txt
+├── backend/                # FastAPI Application
+│   ├── ai_services.py      # ONNX YOLO Runner + Groq LMM Fallback + Rule Chatbot
+│   ├── auth.py             # JWT Token Security, Bcrypt Password Hashing
+│   ├── database.py         # MongoDB Lazy Connector & Repository Queries
+│   ├── main.py             # FastAPI entry point & CORS configuration
+│   ├── routes.py           # REST Endpoint handlers (Detect, Settings, Reports)
+│   ├── schemas.py          # Pydantic Request/Response Models
+│   ├── utils.py            # Logger Setup, Base Settings, ReportLab PDF Generator
+│   └── requirements.txt    # Backend dependencies
+├── ecosort-auth/           # React Authentication Gateway (Vite SPA)
+│   ├── src/
+│   │   ├── App.jsx         # Authentication Form & Axios Redirections
+│   │   └── main.jsx        # Client bootstrapper
+│   └── package.json        # Frontend Node dependencies
+├── frontend/               # Streamlit Dashboard UI
+│   ├── pages/              # Sidebar Multipage Layout
+│   │   ├── 1_Detection.py  # Image uploads, webcam snaps, & bin recommendations
+│   │   ├── 2_Analytics.py  # Plotly interactive data visualizations
+│   │   ├── 3_History.py    # Historical logs grid & deep inspection cards
+│   │   ├── 4_Assistant.py  # Chat interface for sustainability queries
+│   │   ├── 5_Reports.py    # Trigger ESG compliance PDF generator downloads
+│   │   └── 6_Settings.py   # Edit confidence thresholds & CO2 coefficients
+│   ├── Home.py             # App Main Entrance
+│   ├── auth_utils.py       # Streamlit auth interception & bearer config
+│   ├── style.css           # Glassmorphism visual styling overrides
+│   └── requirements.txt    # Streamlit dependencies
+├── model/
+│   ├── best.onnx           # Compiled ONNX YOLO model
+│   └── best_int8.onnx      # Quantized INT8 ONNX YOLO model (active runtime)
+└── README.md               # Documentation
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## 🛠️ Technology Stack
 
-- **Deep Learning / CV**: PyTorch, YOLOv8 (Ultralytics), OpenCV
-- **Backend API**: FastAPI, Uvicorn, Pydantic v2
-- **Frontend Dashboard**: Streamlit, Plotly, Pandas, NumPy
-- **Database**: MongoDB (via `pymongo`) or Local JSON Database Fallback
-- **Reporting**: ReportLab PDF Engine
-
+* **Machine Learning & CV**: ONNX Runtime (CPU execution), OpenCV, YOLOv8
+* **Large Multimodal Fallback**: Groq API (`qwen/qwen3.6-27b` or similar vision model)
+* **Backend Framework**: FastAPI (Uvicorn, Pydantic v2)
+* **Primary Database**: MongoDB Atlas (via `pymongo`)
+* **Dashboard Interface**: Streamlit, Plotly, Pandas, NumPy
+* **Gateway Interface**: React (Vite, Axios, CSS3)
+* **Document Compilation**: ReportLab PDF Engine
 
 ---
 
 ## 🚦 Getting Started
 
-### Local Startup
+Follow these steps to run the complete EcoSort stack locally.
 
-1. **Clone & Setup Environment**
-   ```bash
-   git clone https://github.com/your-username/ecosort.git
-   cd ecosort
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
+### Step 1: Run MongoDB
+Ensure you have MongoDB running locally at `mongodb://localhost:27017` or obtain a MongoDB Atlas Connection String.
 
-2. **Download a supported detection model**
-   ```bash
-   cd model
-   yolo predict model=yolo26x.pt source=YOUR_IMAGE.jpg
-   cd ..
-   ```
-   This downloads `model/yolo26x.pt`, the application's accuracy-first default model.
-   Do not use the included legacy `best.pt`: it was serialized from an
-   unpublished `ultralytics_bower` fork. To use another compatible checkpoint,
-   set `YOLO_MODEL_PATH` in `.env`.
-
-3. **Start Backend Service**
-   ```bash
-   python -m backend.main
-   ```
-   *The Swagger API docs will be hosted at [http://localhost:8000/docs](http://localhost:8000/docs).*
-
-4. **Start Frontend Dashboard**
-   ```bash
-   streamlit run frontend/Home.py
-   ```
-   *Access the web app at [http://localhost:8501](http://localhost:8501).*
-
-### Train the EcoSort waste detector
-
-The standard YOLO model detects general objects, not mixed waste. The included
-training setup converts the official TACO detection annotations into EcoSort's
-eight disposal classes. It downloads roughly 1,500 source images, so run it on
-a stable connection:
-
-```bash
-chmod +x training/*.sh
-./training/setup_taco.sh
-./training/train_waste_model.sh
+### Step 2: Configure Environment Variables
+Create a `.env` file in the `backend/` directory:
+```env
+MONGO_URI=mongodb://localhost:27017  # Your MongoDB connection string
+JWT_SECRET_KEY=generate-a-secure-secret-key-here
+GROQ_API_KEY=your-groq-api-key-here  # Required for vision fallbacks
 ```
 
-Before final training, add and label your own mixed-bin images—especially
-e-waste—under the same eight classes. After training, configure
-`YOLO_MODEL_PATH` in `.env` to the generated `best.pt` checkpoint.
+### Step 3: Run the FastAPI Backend
+1. Navigate to the `backend/` directory:
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+2. Start the FastAPI server:
+   ```bash
+   python main.py
+   ```
+   *The Swagger interactive documentation will be hosted at [http://localhost:8000/docs](http://localhost:8000/docs).*
+
+### Step 4: Run the React Authentication Gateway
+1. Open a new terminal and navigate to the `ecosort-auth/` directory:
+   ```bash
+   cd ecosort-auth
+   npm install
+   ```
+2. Create a `.env` file in `ecosort-auth/` containing:
+   ```env
+   VITE_BACKEND_URL=http://localhost:8000/api
+   VITE_DASHBOARD_URL=http://localhost:8501
+   ```
+3. Start the dev server:
+   ```bash
+   npm run dev
+   ```
+   *The login screen will be hosted at [http://localhost:5173](http://localhost:5173).*
+
+### Step 5: Run the Streamlit Dashboard
+1. Open a new terminal and navigate to the `frontend/` directory:
+   ```bash
+   cd frontend
+   python -m venv venv
+   source venv/bin/activate  # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+2. Set backend configuration in terminal environment:
+   ```bash
+   export API_URL=http://localhost:8000/api
+   export REACT_LOGIN_URL=http://localhost:5173
+   ```
+3. Start Streamlit:
+   ```bash
+   streamlit run Home.py
+   ```
+   *The main dashboard will boot up on [http://localhost:8501](http://localhost:8501).*
 
 ---
 
+## 📊 Carbon Mitigation Calculations
 
-
----
-
-## 📊 Carbon Offsets & Calculations
-
-The carbon mitigation calculations use coefficients adapted from the **EPA WARM (Waste Reduction Model)**:
+Carbon savings estimations use coefficients representing **kg of CO₂ saved per kg of recycled material**, derived from EPA WARM (Waste Reduction Model) metrics:
 
 $$\text{CO}_2 \text{ Saved (kg)} = \sum (\text{Material Recycled (kg)} \times \text{CO}_2 \text{ Offset Factor})$$
 
-### Default Factors (kg CO₂ Saved per kg Recycled):
-- **Plastic**: `2.5`
-- **Paper**: `1.5`
-- **Metal**: `5.0`
-- **Glass**: `0.8`
-- **Organic (Compost)**: `0.5`
-- **E-Waste**: `8.0`
+### Default Material Coefficients:
+* **Metal**: `5.0`
+* **E-Waste**: `4.0`
+* **Plastic**: `2.5`
+* **Paper / Cardboard**: `1.5`
+* **Glass** (Brown, Green, White): `0.8`
+* **Biological (Compost)**: `0.5`
+* **General Trash**: `0.1`
+
+*(Coefficients can be modified at runtime using the **Settings** page in the dashboard).*
