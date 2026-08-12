@@ -32,7 +32,7 @@ if st.sidebar.button("Logout"):
     logout()
 st.sidebar.markdown("---")
 st.sidebar.markdown(
-    "<p style='text-align: center; color: #6b7280; font-size: 0.8rem;'>EcoSort AI © 2026<br/>Developed for Portfolio Demo</p>",
+    "<p style='text-align: center; color: #6b7280; font-size: 0.8rem;'>EcoSort AI © 2026</p>",
     unsafe_allow_html=True
 )
 
