@@ -1,4 +1,5 @@
 import streamlit as st
+from utils import inject_css
 import os
 import base64
 
@@ -9,7 +10,7 @@ inject_css()
 from auth_utils import check_auth, get_current_user
 from database import Repository
 from ai_services import detector_service, RecommendationEngine
-from utils import settings, inject_css
+from utils import settings
 import cv2
 import numpy as np
 
