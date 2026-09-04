@@ -5,12 +5,12 @@ from datetime import datetime
 
 # ✅ Must be absolute first Streamlit call
 st.set_page_config(
-inject_css()
     page_title="EcoSort AI - Home",
     page_icon="E",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+inject_css()
 
 from auth_utils import check_auth, get_current_user, logout
 from database import Repository
