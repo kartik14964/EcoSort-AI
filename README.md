@@ -1,192 +1,72 @@
-# ♻️ EcoSort AI: Intelligent Waste Segregation & Sustainability Analytics Platform
+# 🌍 EcoSort AI
 
-EcoSort AI is a full-stack waste classification, recommendation, and sustainability metrics platform. It leverages a fine-tuned computer vision model quantized for CPU execution, a large multimodal AI model fallback for low-confidence detections, and custom dashboards to track compliance-ready ESG analytics.
+EcoSort AI is an intelligent waste classification and sustainability analytics platform. It leverages advanced computer vision and multi-modal AI to analyze waste items, categorize them into standard recycling groups, and track your personal or organizational carbon footprint offset.
 
----
+## ✨ Key Features
+- **📸 Smart Waste Detection:** Snap a photo or upload an image. EcoSort uses either a blazing-fast local ONNX object detection model or Groq's high-accuracy Cloud Vision AI to classify waste across 12 distinct categories.
+- **📊 Sustainability Analytics:** Track your recycling efficiency, daily scanning volumes, and cumulative carbon savings (kg CO₂) via interactive Plotly dashboards.
+- **🤖 AI Sustainability Assistant:** A built-in Groq-powered chatbot that analyzes your historical data to answer questions like *"How much CO₂ did I save this week?"* or *"What is the proper way to dispose of a battery?"*
+- **📜 Automated Reporting:** Generate and export historical logs as CSV reports for compliance or personal tracking.
+- **⚙️ Fully Configurable:** Easily configure AI vision preferences and fine-tune carbon offset factors per waste category directly from the Settings UI.
 
-## 🏗️ System Architecture & Data Flow
+## 🛠️ Tech Stack
+- **Frontend / UI:** Streamlit (Native Python UI, fully responsive layout)
+- **Computer Vision (Local):** YOLO-based object detection via ONNX Runtime
+- **Cloud Vision & LLM:** Groq API (Llama 3.2 Vision / Qwen multimodal architectures)
+- **Database:** MongoDB Atlas (Cloud database for storing users, detections, and settings)
+- **Data Visualization:** Pandas & Plotly Express
 
-EcoSort features a hybrid architecture separating authorization concerns, backend business logic, AI inference, and interactive reporting:
+## 🚀 Local Setup
 
+### 1. Prerequisites
+Ensure you have Python 3.9+ installed.
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
 ```
-                            ┌────────────────────────┐
-                            │    Vite + React SPA    │  (Login Gateway - Port 5173)
-                            │   (ecosort-auth)       │
-                            └───────────┬────────────┘
-                                        │ JWT Redirect (?token=...)
-                                        ▼
-┌───────────────────────────────────────────────────────────────────────────────┐
-│                          FastAPI Web Backend                     (Port 8000)  │
-│                                                                               │
-│   ┌────────────────────┐      ┌─────────────────────┐      ┌──────────────┐   │
-│   │    Auth Router     ├─────►│  Database Connector ├─────►│ MongoDB Atlas│   │
-│   │   (PyJWT/Bcrypt)   │      │ (Lazy PyMongo Repo) │      └──────────────┘   │
-│   └────────────────────┘      └──────────▲──────────┘                         │
-│                                          │                                    │
-│   ┌────────────────────┐                 │                                    │
-│   │     API Router     ├─────────────────┘                                    │
-│   │ (Detection/Reports)│                                                      │
-│   └──────────┬─────────┘                                                      │
-│              │                                                                │
-│              ▼                                                                │
-│   ┌────────────────────────────────────────────────────────┐                  │
-│   │                    AI Inference System                 │                  │
-│   │                                                        │                  │
-│   │  ┌───────────────────────┐      ┌───────────────────┐  │                  │
-│   │  │     ONNX Runtime      │      │  Groq Vision API  │  │                  │
-│   │  │ (YOLOv8 INT8, CPU)    ├─────►│ (Fallback LMM)    │  │                  │
-│   │  └───────────────────────┘      └───────────────────┘  │                  │
-│   └────────────────────────────────────────────────────────┘                  │
-└──────────────────────────────────────▲────────────────────────────────────────┘
-                                       │ HTTP REST Requests
-                                       │ (Bearer Authentication)
-                            ┌──────────┴────────────┐
-                            │  Streamlit Dashboard  │  (Dashboard Pages - Port 8501)
-                            │  (frontend/Home.py)   │
-                            └───────────────────────┘
-```
+*(Note: We use `opencv-python-headless` to avoid missing UI library errors on servers).*
 
-### Flow of Operations:
-1. **User Authentication**: Users land on the **React Portal** (`ecosort-auth`), register/login, obtain a JWT, and are redirected to the **Streamlit Dashboard** with the token in the URL.
-2. **Inference Pipeline**: Users upload an image or capture a webcam photo. The Streamlit server forwards the frame to the `/api/detect/image` backend.
-3. **Dual-Model Inference**:
-   * The **ONNX Engine** runs a CPU-quantized YOLOv8 object detector (`best_int8.onnx`).
-   * If YOLO detects nothing or falls below `50%` confidence, the backend invokes the **Groq Vision Fallback** (`qwen/qwen3.6-27b`) to categorize the waste item.
-4. **Data Aggregation**: Detections can be manually saved to **MongoDB** to compute real-time recycling rates and CO₂ metrics.
-5. **Compliance Reporting**: Dynamic PDFs are generated via **ReportLab** incorporating cumulative carbon savings projections.
-
----
-
-## 📁 Repository Structure
-
-```
-ecosort/
-├── backend/                # FastAPI Application
-│   ├── ai_services.py      # ONNX YOLO Runner + Groq LMM Fallback + Rule Chatbot
-│   ├── auth.py             # JWT Token Security, Bcrypt Password Hashing
-│   ├── database.py         # MongoDB Lazy Connector & Repository Queries
-│   ├── main.py             # FastAPI entry point & CORS configuration
-│   ├── routes.py           # REST Endpoint handlers (Detect, Settings, Reports)
-│   ├── schemas.py          # Pydantic Request/Response Models
-│   ├── utils.py            # Logger Setup, Base Settings, ReportLab PDF Generator
-│   └── requirements.txt    # Backend dependencies
-├── ecosort-auth/           # React Authentication Gateway (Vite SPA)
-│   ├── src/
-│   │   ├── App.jsx         # Authentication Form & Axios Redirections
-│   │   └── main.jsx        # Client bootstrapper
-│   └── package.json        # Frontend Node dependencies
-├── frontend/               # Streamlit Dashboard UI
-│   ├── pages/              # Sidebar Multipage Layout
-│   │   ├── 1_Detection.py  # Image uploads, webcam snaps, & bin recommendations
-│   │   ├── 2_Analytics.py  # Plotly interactive data visualizations
-│   │   ├── 3_History.py    # Historical logs grid & deep inspection cards
-│   │   ├── 4_Assistant.py  # Chat interface for sustainability queries
-│   │   ├── 5_Reports.py    # Trigger ESG compliance PDF generator downloads
-│   │   └── 6_Settings.py   # Edit confidence thresholds & CO2 coefficients
-│   ├── Home.py             # App Main Entrance
-│   ├── auth_utils.py       # Streamlit auth interception & bearer config
-│   ├── style.css           # Glassmorphism visual styling overrides
-│   └── requirements.txt    # Streamlit dependencies
-├── model/
-│   ├── best.onnx           # Compiled ONNX YOLO model
-│   └── best_int8.onnx      # Quantized INT8 ONNX YOLO model (active runtime)
-└── README.md               # Documentation
-```
-
----
-
-## 🛠️ Technology Stack
-
-* **Machine Learning & CV**: ONNX Runtime (CPU execution), OpenCV, YOLOv8
-* **Large Multimodal Fallback**: Groq API (`qwen/qwen3.6-27b` or similar vision model)
-* **Backend Framework**: FastAPI (Uvicorn, Pydantic v2)
-* **Primary Database**: MongoDB Atlas (via `pymongo`)
-* **Dashboard Interface**: Streamlit, Plotly, Pandas, NumPy
-* **Gateway Interface**: React (Vite, Axios, CSS3)
-* **Document Compilation**: ReportLab PDF Engine
-
----
-
-## 🚦 Getting Started
-
-Follow these steps to run the complete EcoSort stack locally.
-
-### Step 1: Run MongoDB
-Ensure you have MongoDB running locally at `mongodb://localhost:27017` or obtain a MongoDB Atlas Connection String.
-
-### Step 2: Configure Environment Variables
-Create a `.env` file in the `backend/` directory:
+### 3. Environment Variables
+Create a `.env` file in the root directory with your API keys:
 ```env
-MONGO_URI=mongodb://localhost:27017  # Your MongoDB connection string
-JWT_SECRET_KEY=generate-a-secure-secret-key-here
-GROQ_API_KEY=your-groq-api-key-here  # Required for vision fallbacks
+MONGO_URI="mongodb+srv://<username>:<password>@cluster0...mongodb.net/?appName=Cluster0"
+GROQ_API_KEY="gsk_..."
 ```
 
-### Step 3: Run the FastAPI Backend
-1. Navigate to the `backend/` directory:
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-2. Start the FastAPI server:
-   ```bash
-   python main.py
-   ```
-   *The Swagger interactive documentation will be hosted at [http://localhost:8000/docs](http://localhost:8000/docs).*
+### 4. Run the Application
+Start the Streamlit server:
+```bash
+streamlit run Home.py
+```
+Open `http://localhost:8501` in your browser.
 
-### Step 4: Run the React Authentication Gateway
-1. Open a new terminal and navigate to the `ecosort-auth/` directory:
-   ```bash
-   cd ecosort-auth
-   npm install
-   ```
-2. Create a `.env` file in `ecosort-auth/` containing:
-   ```env
-   VITE_BACKEND_URL=http://localhost:8000/api
-   VITE_DASHBOARD_URL=http://localhost:8501
-   ```
-3. Start the dev server:
-   ```bash
-   npm run dev
-   ```
-   *The login screen will be hosted at [http://localhost:5173](http://localhost:5173).*
+## 📦 Deployment Guide
 
-### Step 5: Run the Streamlit Dashboard
-1. Open a new terminal and navigate to the `frontend/` directory:
-   ```bash
-   cd frontend
-   python -m venv venv
-   source venv/bin/activate  # Windows: venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-2. Set backend configuration in terminal environment:
-   ```bash
-   export API_URL=http://localhost:8000/api
-   export REACT_LOGIN_URL=http://localhost:5173
-   ```
-3. Start Streamlit:
-   ```bash
-   streamlit run Home.py
-   ```
-   *The main dashboard will boot up on [http://localhost:8501](http://localhost:8501).*
+EcoSort is architected to be perfectly deployable on **Streamlit Community Cloud** or **Hugging Face Spaces**. 
 
----
+1. **Push to GitHub**: Commit your code and push it to a public or private repository.
+2. **Deploy**:
+   - For **Streamlit Cloud**: Connect your repository at [share.streamlit.io](https://share.streamlit.io/). Set the main file to `Home.py`.
+   - For **Hugging Face Spaces**: Create a new Streamlit Space and upload your repository files.
+3. **Secrets**: Navigate to the Settings -> Secrets section of your hosting provider and add your `MONGO_URI` and `GROQ_API_KEY` exactly as they appear in your `.env` file.
 
-## 📊 Carbon Mitigation Calculations
-
-Carbon savings estimations use coefficients representing **kg of CO₂ saved per kg of recycled material**, derived from EPA WARM (Waste Reduction Model) metrics:
-
-$$\text{CO}_2 \text{ Saved (kg)} = \sum (\text{Material Recycled (kg)} \times \text{CO}_2 \text{ Offset Factor})$$
-
-### Default Material Coefficients:
-* **Metal**: `5.0`
-* **E-Waste**: `4.0`
-* **Plastic**: `2.5`
-* **Paper / Cardboard**: `1.5`
-* **Glass** (Brown, Green, White): `0.8`
-* **Biological (Compost)**: `0.5`
-* **General Trash**: `0.1`
-
-*(Coefficients can be modified at runtime using the **Settings** page in the dashboard).*
+## 📂 Project Structure
+```text
+ecosort/
+├── Home.py                  # Main entry point and authentication router
+├── pages/                   # Auto-generated Streamlit Sidebar Navigation
+│   ├── 1_Detection.py       # Computer Vision & Waste Classification UI
+│   ├── 2_Analytics.py       # Interactive Plotly Dashboards
+│   ├── 3_History.py         # Tabular view of past scans
+│   ├── 4_Assistant.py       # Groq AI Chatbot interface
+│   ├── 5_Reports.py         # CSV Export functionality
+│   └── 6_Settings.py        # Carbon factor and AI configuration
+├── ai_services.py           # Core logic for ONNX inference and Groq classification
+├── database.py              # MongoDB connection and schema definitions
+├── auth_utils.py            # User login, registration, and session management
+├── utils.py                 # Core settings, constants, and logging
+├── style.css                # Custom UI styling applied globally
+└── model/                   
+    └── best_int8.onnx       # Local optimized YOLO model
+```

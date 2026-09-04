@@ -3,23 +3,18 @@ import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parents[1]  # ecosort/ root
+BASE_DIR = Path(__file__).resolve().parents[0]  # ecosort/ root
 
 class Settings(BaseSettings):
     APP_NAME: str = "EcoSort AI"
-    ALLOWED_ORIGINS: str = "*" # Comma separated list
-    API_URL: str = "http://localhost:8000/api"
     MONGO_URI: str = "mongodb://localhost:27017" # Default fallback
     DB_NAME: str = "ecosort"
     # `best.pt` in older project copies was saved from the unpublished
     # `ultralytics_bower` fork and cannot be loaded by official Ultralytics.
     YOLO_MODEL_PATH: str = str(BASE_DIR / "model" / "best_int8.onnx")
     DETECTION_THRESHOLD: float = 0.25
-    UPLOAD_DIR: str = str(BASE_DIR / "backend" / "uploads")
     REPORTS_DIR: str = str(BASE_DIR / "reports")
-    JWT_SECRET_KEY: str = "default-insecure-secret"
     GROQ_API_KEY: str = ""
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080
     
     # Standard emission factors (kg CO2 saved per kg of recycled material)
     # Source: EPA WARM model and carbon offset estimation figures
@@ -44,7 +39,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Create necessary directories
-os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.REPORTS_DIR, exist_ok=True)
 os.makedirs(os.path.dirname(settings.YOLO_MODEL_PATH), exist_ok=True)
 
@@ -77,7 +71,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
-from backend.utils import settings
+from utils import settings
 
 class NumberedCanvas(canvas.Canvas):
     """Canvas that computes total pages dynamically for footer page numbers."""
@@ -124,7 +118,7 @@ class ReportGenerator:
     @staticmethod
     def generate_pdf(timeframe_days: int = 30) -> str:
         # 1. ADD THE IMPORT HERE, INSIDE THE FUNCTION
-        from backend.database import Repository
+        from database import Repository
         
         filename = f"ecosort_report_last_{timeframe_days}_days.pdf"
         filepath = os.path.join(settings.REPORTS_DIR, filename)

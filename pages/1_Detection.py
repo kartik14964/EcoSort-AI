@@ -1,17 +1,19 @@
 import streamlit as st
-import requests
 import os
 import base64
 
 # ✅ Must be first Streamlit call
 st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
 
-from frontend.auth_utils import check_auth, get_auth_headers
+from auth_utils import check_auth, get_current_user
+from database import Repository
+from ai_services import detector_service, RecommendationEngine
+from utils import settings
+import cv2
+import numpy as np
 
 # ✅ Auth check — redirects to React if no token
 check_auth()
-
-API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 # Load CSS
 def load_css():
@@ -30,16 +32,14 @@ def filter_by_confidence(detections, threshold):
 def save_to_db(detections, key):
     if st.button("💾 Save to Database", key=key):
         try:
-            save_resp = requests.post(
-                f"{API_URL}/detections/save",
-                json={"detections": detections},
-                headers=get_auth_headers(),
-                timeout=10
-            )
-            if save_resp.status_code == 200:
-                st.success(f"✅ Saved {save_resp.json()['count']} item(s) to database!")
-            else:
-                st.error(f"Save failed: {save_resp.text}")
+            username = get_current_user()
+            count = 0
+            for det in detections:
+                det_copy = det.copy()
+                det_copy["username"] = username if username != "anonymous" else "anonymous"
+                Repository.insert_detection(det_copy)
+                count += 1
+            st.success(f"✅ Saved {count} item(s) to database!")
         except Exception as e:
             st.error(f"Save error: {e}")
 
@@ -74,7 +74,7 @@ def render_detections(detections, conf_thresh):
                 {f'<div style="display: grid; grid-template-columns: 120px 1fr; margin-bottom: 4px;"><strong style="color:#64748b;">Special Note:</strong> <span style="color: #ef4444;">{det["special_instructions"]}</span></div>' if det.get('special_instructions') else ''}
                 <div style="display: grid; grid-template-columns: 120px 1fr; margin-bottom: 4px;">
                     <strong style="color:#64748b;">Carbon Offset:</strong>
-                    <span style="color: #10b981; font-weight: 600;">{det['carbon_saved_kg']} kg CO₂</span>
+                    <span style="color: #10b981; font-weight: 600;">{det.get('carbon_saved_kg', 0.0)} kg CO₂</span>
                 </div>
             </div>
             <div style="margin-top: 16px; border-top: 1px dashed #e2e8f0;">
@@ -91,22 +91,19 @@ st.write("Upload an image or snap a photo to analyze its recycling footprint.")
 st.sidebar.subheader("Detection Controls")
 
 try:
-    settings_resp = requests.get(f"{API_URL}/settings", headers=get_auth_headers())
-    if settings_resp.status_code == 200:
-        saved_threshold = float(settings_resp.json().get("detection_threshold", 0.25))
-    else:
-        saved_threshold = 0.25
+    settings_doc = Repository.get_settings()
+    saved_threshold = float(settings_doc.get("detection_threshold", 0.25))
 except Exception:
     saved_threshold = 0.25
 
-conf_thresh = st.sidebar.slider(
-    "Confidence Threshold",
-    min_value=0.0,
-    max_value=1.0,
-    value=saved_threshold,
-    step=0.05
+st.sidebar.subheader("AI Processing Mode")
+processing_mode = st.sidebar.radio(
+    "Select Mode", 
+    ["🧠 Smart Mode (Advanced AI)", "⚡ Fast Mode (Local AI)"],
+    help="Smart Mode uses advanced AI for maximum accuracy (Recommended). Fast Mode runs locally but only recognizes 12 basic categories."
 )
-st.sidebar.caption(f"Only detections at or above {conf_thresh:.0%} are shown.")
+force_ai = "Smart Mode" in processing_mode
+allow_fallback = False # Strictly isolate them so it's not confusing
 
 mode = st.radio("Choose Input Method", ["Image Upload", "Webcam Snap"], horizontal=True)
 
@@ -118,18 +115,30 @@ if mode == "Image Upload":
         st.write("Processing image...")
         res_data = None
         try:
-            uploaded_file.seek(0)
-            files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
-            response = requests.post(
-                f"{API_URL}/detect/image?threshold={conf_thresh}",
-                files=files, timeout=120, headers=get_auth_headers()
-            )
-            if response.status_code == 200:
-                res_data = response.json()
-            else:
-                st.error(f"Detection failed: {response.text}")
+            file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, 1)
+            temp_path = "temp_upload.jpg"
+            cv2.imwrite(temp_path, image)
+            
+            annotated_img, raw_detections = detector_service.detect_objects(temp_path, threshold=saved_threshold, force_groq=force_ai, allow_fallback=allow_fallback)
+            
+            settings_doc = Repository.get_settings()
+            co2_factors = settings_doc.get("co2_factors", settings.CO2_SAVINGS_FACTORS)
+            
+            enriched = []
+            for det in raw_detections:
+                rec = RecommendationEngine.get_recommendation(det["object_name"], det["category"])
+                det.update(rec)
+                det["carbon_saved_kg"] = co2_factors.get(det["category"], 0.0)
+                enriched.append(det)
+                
+            _, buffer = cv2.imencode('.jpg', annotated_img)
+            res_data = {
+                "annotated_image_b64": base64.b64encode(buffer).decode('utf-8'),
+                "detections": enriched
+            }
         except Exception as e:
-            st.error(f"API Connection Error: {e}")
+            st.error(f"Processing Error: {e}")
 
         if res_data:
             col1, col2 = st.columns([1, 1])
@@ -137,17 +146,10 @@ if mode == "Image Upload":
                 st.subheader("Annotated Frame")
                 img_data = base64.b64decode(res_data["annotated_image_b64"])
                 st.image(img_data, width="stretch")
-                st.download_button(
-                    label="⬇️ Download Annotated Image",
-                    data=img_data,
-                    file_name="ecosort_annotated.jpg",
-                    mime="image/jpeg",
-                    key="download_image"
-                )
             with col2:
                 st.subheader("Classification & Recommendations")
-                detections = filter_by_confidence(res_data.get("detections", []), conf_thresh)
-                render_detections(detections, conf_thresh)
+                detections = filter_by_confidence(res_data.get("detections", []), saved_threshold)
+                render_detections(detections, saved_threshold)
 
             if detections:
                 with col1:
@@ -161,18 +163,30 @@ elif mode == "Webcam Snap":
         st.write("Analyzing camera snapshot...")
         res_data = None
         try:
-            webcam_img.seek(0)
-            files = {"file": ("webcam.jpg", webcam_img, "image/jpeg")}
-            response = requests.post(
-                f"{API_URL}/detect/image?threshold={conf_thresh}",
-                files=files, timeout=120, headers=get_auth_headers()
-            )
-            if response.status_code == 200:
-                res_data = response.json()
-            else:
-                st.error(f"Detection failed: {response.text}")
+            file_bytes = np.asarray(bytearray(webcam_img.read()), dtype=np.uint8)
+            image = cv2.imdecode(file_bytes, 1)
+            temp_path = "temp_webcam.jpg"
+            cv2.imwrite(temp_path, image)
+            
+            annotated_img, raw_detections = detector_service.detect_objects(temp_path, threshold=saved_threshold, force_groq=force_ai, allow_fallback=allow_fallback)
+            
+            settings_doc = Repository.get_settings()
+            co2_factors = settings_doc.get("co2_factors", settings.CO2_SAVINGS_FACTORS)
+            
+            enriched = []
+            for det in raw_detections:
+                rec = RecommendationEngine.get_recommendation(det["object_name"], det["category"])
+                det.update(rec)
+                det["carbon_saved_kg"] = co2_factors.get(det["category"], 0.0)
+                enriched.append(det)
+                
+            _, buffer = cv2.imencode('.jpg', annotated_img)
+            res_data = {
+                "annotated_image_b64": base64.b64encode(buffer).decode('utf-8'),
+                "detections": enriched
+            }
         except Exception as e:
-            st.error(f"API Connection Error: {e}")
+            st.error(f"Processing Error: {e}")
 
         if res_data:
             col1, col2 = st.columns([1, 1])
@@ -180,17 +194,10 @@ elif mode == "Webcam Snap":
                 st.subheader("Annotated Capture")
                 img_data = base64.b64decode(res_data["annotated_image_b64"])
                 st.image(img_data, width="stretch")
-                st.download_button(
-                    label="⬇️ Download Annotated Image",
-                    data=img_data,
-                    file_name="ecosort_webcam.jpg",
-                    mime="image/jpeg",
-                    key="download_webcam"
-                )
             with col2:
                 st.subheader("Classification & Recommendations")
-                detections = filter_by_confidence(res_data.get("detections", []), conf_thresh)
-                render_detections(detections, conf_thresh)
+                detections = filter_by_confidence(res_data.get("detections", []), saved_threshold)
+                render_detections(detections, saved_threshold)
 
             if detections:
                 with col1:

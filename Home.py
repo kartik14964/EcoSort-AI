@@ -1,5 +1,4 @@
 import streamlit as st
-import requests
 import os
 from datetime import datetime
 
@@ -11,12 +10,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-from frontend.auth_utils import check_auth, get_auth_headers, logout
+from auth_utils import check_auth, get_current_user, logout
+from database import Repository
 
 # ✅ Auth check — redirects to React if no token
 check_auth()
 
-API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
+
 
 # Load CSS
 def load_css():
@@ -36,39 +36,29 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# API helpers
 def get_dashboard_summary():
     try:
-        response = requests.get(
-            f"{API_URL}/analytics/summary?days=30",
-            headers=get_auth_headers(),
-            timeout=10
-        )
-        if response.status_code == 200:
-            return response.json()
-        st.error(f"Could not load dashboard summary (status {response.status_code}).")
+        username = get_current_user()
+        return Repository.get_analytics_summary(days=30, username=username if username != "anonymous" else None)
     except Exception as e:
-        st.error(f"Cannot connect to backend: {e}")
-    return {
-        "total_detections": 0,
-        "recycling_rate_percent": 0.0,
-        "carbon_saved_kg": 0.0,
-        "average_confidence": 0.0
-    }
+        st.error(f"Cannot load dashboard: {e}")
+        return {
+            "total_detections": 0,
+            "recycling_rate_percent": 0.0,
+            "carbon_saved_kg": 0.0,
+            "average_confidence": 0.0
+        }
 
 def get_recent_detections(limit=5):
     try:
-        response = requests.get(
-            f"{API_URL}/detections?limit={limit}",
-            headers=get_auth_headers(),
-            timeout=10
-        )
-        if response.status_code == 200:
-            return response.json()
-        st.error(f"Could not load recent detections (status {response.status_code}).")
+        username = get_current_user()
+        filters = {}
+        if username != "anonymous":
+            filters["username"] = username
+        return Repository.get_detections(filters=filters, limit=limit)
     except Exception as e:
-        st.error(f"Cannot connect to backend: {e}")
-    return []
+        st.error(f"Cannot load detections: {e}")
+        return []
 
 # Hero Banner
 st.markdown("""

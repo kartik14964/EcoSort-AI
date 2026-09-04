@@ -5,8 +5,8 @@ import base64
 import numpy as np
 import onnxruntime as ort
 import threading
-from backend.utils import settings
-from backend.utils import setup_logger
+from utils import settings
+from utils import setup_logger
 import gc
 
 logger = setup_logger("detector_service")
@@ -38,7 +38,8 @@ class GroqClassifier:
             ext = image_path.lower().split(".")[-1]
             mime = "image/png" if ext == "png" else "image/jpeg"
             prompt = """You are a waste classification expert for a sustainability app.
-    Classify this waste item into exactly one of these categories:
+    Look at the image carefully and identify the main object.
+    Then, classify this waste item into exactly one of these categories:
     Plastic, Paper, Metal, Brown-glass, Green-glass, White-glass,
     Biological, Battery, Cardboard, Clothes, Shoes, Trash
 
@@ -46,15 +47,22 @@ class GroqClassifier:
     - Brown-glass = brown/amber glass bottles or jars
     - Green-glass = green glass bottles or jars
     - White-glass = clear/transparent glass bottles or jars
-    - Biological = food waste, organic matter, plants
+    - Biological = food waste (e.g., orange peels, fruit, vegetables), organic matter, plants
     - Battery = any battery type
     - Cardboard = cardboard boxes, packaging
     - Clothes = clothing, fabric items
     - Shoes = footwear
     - Trash = non-recyclable or ambiguous items (styrofoam, ceramics, mixed materials)
 
-    After thinking, respond with ONLY a JSON object on the final line, nothing else after it.
-    Example: {"category": "Plastic", "confidence": 0.95}"""
+    Think step-by-step about what the object is, its material, and which category it belongs to.
+    Write your thought process inside <think>...</think> tags.
+    After thinking, respond with ONLY a JSON object on the final line.
+    
+    Example:
+    <think>
+    The image shows a crumpled plastic water bottle. It is made of clear PET plastic. Therefore, the category is Plastic.
+    </think>
+    {"category": "Plastic", "confidence": 0.95}"""
 
             response = self.client.chat.completions.create(
                 model=self.model_name,
@@ -67,7 +75,6 @@ class GroqClassifier:
                 }],
                 temperature=0,
                 max_tokens=2048,
-                reasoning_effort="none",
             )
 
             text = response.choices[0].message.content.strip()
@@ -194,14 +201,15 @@ class DetectionService:
             logger.error(f"Error loading model: {e}")
             self.is_loaded = False
 
-    def detect_objects(self, image_path: str, threshold: float = None):
+    def detect_objects(self, image_path: str, threshold: float = None, force_groq: bool = False, allow_fallback: bool = True):
         threshold = threshold if threshold is not None else settings.DETECTION_THRESHOLD
 
-        if not self.is_loaded or self.session is None:
-            logger.warning("Session not available, reloading...")
-            self.load_model()
-        if not self.is_loaded or self.session is None:
-            raise RuntimeError("Detection model failed to load.")
+        if not force_groq:
+            if not self.is_loaded or self.session is None:
+                logger.warning("Session not available, reloading...")
+                self.load_model()
+            if not self.is_loaded or self.session is None:
+                raise RuntimeError("Detection model failed to load.")
 
         image = cv2.imread(image_path)
         if image is None:
@@ -212,30 +220,31 @@ class DetectionService:
             scale = 640 / max(h, w)
             image = cv2.resize(image, (int(w * scale), int(h * scale)))
 
-        annotated_img, detections = self._run_real_inference(image, threshold)
+        annotated_img = image.copy()
+        detections = []
+        
+        if not force_groq:
+            annotated_img, detections = self._run_real_inference(image, threshold)
 
         if self.groq and self.groq.available:
-            if not detections or detections[0]["confidence"] < 0.5:
-                logger.info("ONNX low confidence — using Groq fallback...")
+            needs_fallback = not detections or detections[0]["confidence"] < 0.8
+            if force_groq or (allow_fallback and needs_fallback):
+                logger.info("Using Groq Vision...")
                 groq_result = self.groq.classify(image_path)
                 category = groq_result["category"]
-                conf = float(groq_result.get("confidence", 0.85))
+                conf = float(groq_result.get("confidence", 0.95))
 
-                h, w = image.shape[:2]
                 color = self.CATEGORY_COLORS.get(category, (255, 255, 255))
 
                 cv2.rectangle(annotated_img, (10, 10), (w-10, h-10), color, 4)
-                label = f"{category} {conf:.2f} (AI)"
-                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)
-                cv2.rectangle(annotated_img, (10, 10), (10+tw+10, 10+th+14), color, -1)
-                cv2.putText(annotated_img, label, (15, 10+th+4),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2)
-
+                cv2.putText(annotated_img, f"{category} (AI Vision) {conf:.2f}", (20, 40), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 1, color, 2)
+                
                 detections = [{
                     "object_name": category,
                     "confidence": conf,
                     "category": category,
-                    "box": [10, 10, w-10, h-10],
+                    "bbox": [10, 10, w-10, h-10],
                     "method": "Groq-AI"
                 }]
 
@@ -334,8 +343,8 @@ class LazyDetectionService:
                     self._instance = DetectionService()
         return self._instance
 
-    def detect_objects(self, image_path: str, threshold: float = None):
-        return self._get_instance().detect_objects(image_path, threshold)
+    def detect_objects(self, image_path: str, threshold: float = None, force_groq: bool = False, allow_fallback: bool = True):
+        return self._get_instance().detect_objects(image_path, threshold, force_groq, allow_fallback)
 
 
 detector_service = LazyDetectionService()
@@ -343,7 +352,7 @@ detector_service = LazyDetectionService()
 
 import pandas as pd
 from datetime import datetime, timedelta
-from backend.database import Repository
+from database import Repository
 
 class AIAssistantService:
     @staticmethod

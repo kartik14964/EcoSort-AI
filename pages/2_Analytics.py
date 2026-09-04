@@ -1,16 +1,14 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-import requests
 import os
 from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="EcoSort AI - Analytics", page_icon="📊", layout="wide")
 
-from frontend.auth_utils import check_auth, get_auth_headers
+from auth_utils import check_auth, get_current_user
+from database import Repository
 check_auth()
-
-API_URL = os.environ.get("API_URL", "http://localhost:8000/api")
 
 def load_css():
     css_file = os.path.join(os.path.dirname(__file__), "..", "style.css")
@@ -20,30 +18,39 @@ def load_css():
 
 load_css()
 
-def load_detections_dataframe(days=30):
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+def load_detections_dataframe(days=None):
+    if days is not None:
+        start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    else:
+        start_date = None
+        
     df = pd.DataFrame()
     try:
-        response = requests.get(f"{API_URL}/detections?limit=1000", timeout=10, headers=get_auth_headers())
-        if response.status_code == 200:
-            data = response.json()
-            if data:
-                df = pd.DataFrame(data)
-        else:
-            st.error(f"Could not load detections (status {response.status_code}).")
+        username = get_current_user()
+        filters = {}
+        if start_date:
+            filters["start_date"] = start_date
+            
+        if username != "anonymous":
+            filters["username"] = username
+        data = Repository.get_detections(filters=filters, limit=1000)
+        if data:
+            df = pd.DataFrame(data)
     except Exception as e:
-        st.error(f"Cannot connect to backend: {e}")
+        st.error(f"Cannot load detections: {e}")
+        
     if not df.empty:
         df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True)
-        df = df[df['timestamp'] >= start_date]
+        if start_date:
+            df = df[df['timestamp'] >= start_date]
     return df
 
 st.title("📊 Sustainability Analytics Dashboard")
 st.write("Examine waste classification distribution, recycle rate performance metrics, and carbon footprint trends.")
 
 st.sidebar.subheader("Analytics Settings")
-timeframe = st.sidebar.selectbox("Select Timeframe", ["Last 7 Days", "Last 30 Days", "Last 90 Days"], index=1)
-days_map = {"Last 7 Days": 7, "Last 30 Days": 30, "Last 90 Days": 90}
+timeframe = st.sidebar.selectbox("Select Timeframe", ["Last 7 Days", "Last 30 Days", "Last 90 Days", "All Time"], index=3)
+days_map = {"Last 7 Days": 7, "Last 30 Days": 30, "Last 90 Days": 90, "All Time": None}
 days = days_map[timeframe]
 
 df = load_detections_dataframe(days)
@@ -75,7 +82,7 @@ else:
         fig_pie = px.pie(cat_counts, values='Count', names='Category',
                          color_discrete_sequence=px.colors.qualitative.Pastel, hole=0.4)
         fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                               font_color='#f3f4f6',
+                               font_color='#103b27',
                                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5))
         st.plotly_chart(fig_pie, width="stretch", config={'displayModeBar': False})
 
@@ -87,7 +94,7 @@ else:
                          color_discrete_sequence=px.colors.qualitative.Pastel, barmode='stack',
                          labels={'date': 'Date', 'Count': 'Items Logged', 'category': 'Category'})
         fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                               font_color='#f3f4f6',
+                               font_color='#103b27',
                                xaxis=dict(showgrid=False, color='#9ca3af'),
                                yaxis=dict(gridcolor='rgba(255,255,255,0.05)', color='#9ca3af'))
         st.plotly_chart(fig_bar, width="stretch", config={'displayModeBar': False})
@@ -103,7 +110,7 @@ else:
                            labels={'timestamp': 'Time', 'cumulative_co2': 'Cumulative CO₂ Saved (kg)'},
                            color_discrete_sequence=['#10b981'])
         fig_line.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                                font_color='#f3f4f6',
+                                font_color='#103b27',
                                 xaxis=dict(showgrid=False, color='#9ca3af'),
                                 yaxis=dict(gridcolor='rgba(255,255,255,0.05)', color='#9ca3af'))
         st.plotly_chart(fig_line, width="stretch", config={'displayModeBar': False})
@@ -116,7 +123,7 @@ else:
                          color_discrete_sequence=['#1e3a8a'],
                          labels={'Count': 'Count', 'Item': 'Material'})
         fig_top.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                               font_color='#f3f4f6',
+                               font_color='#103b27',
                                yaxis=dict(autorange="reversed", showgrid=False, color='#9ca3af'),
                                xaxis=dict(gridcolor='rgba(255,255,255,0.05)', color='#9ca3af'))
         st.plotly_chart(fig_top, width="stretch", config={'displayModeBar': False})

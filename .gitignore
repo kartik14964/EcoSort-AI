@@ -3,9 +3,7 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 .env
-backend/uploads/*
+temp_upload.jpg
+temp_webcam.jpg
+reports/*.csv
 reports/*.pdf
-datasets/
-training/runs/
-ecosort-auth/.env
-ecosort-auth/node_modules/

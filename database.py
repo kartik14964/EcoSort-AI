@@ -2,8 +2,8 @@ import time
 import pymongo
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 import certifi
-from backend.utils import settings
-from backend.utils import setup_logger
+from utils import settings
+from utils import setup_logger
 
 logger = setup_logger("database_connection")
 
@@ -98,9 +98,9 @@ db_conn = DatabaseConnection()
 from datetime import datetime, timedelta
 from typing import Optional
 from bson import ObjectId
-from backend.database import db_conn
-from backend.utils import settings
-from backend.utils import setup_logger
+from database import db_conn
+from utils import settings
+from utils import setup_logger
 
 logger = setup_logger("database_repository")
 
@@ -184,7 +184,11 @@ class Repository:
 
         try:
             cursor = db_conn.db.detections.find(query).sort("timestamp", -1).limit(limit)
-            return list(cursor)
+            results = []
+            for doc in cursor:
+                doc["_id"] = str(doc["_id"])
+                results.append(doc)
+            return results
         except Exception as e:
             logger.error(f"Error listing detections: {e}")
             return []
