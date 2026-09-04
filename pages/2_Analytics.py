@@ -1,10 +1,12 @@
 import streamlit as st
+from utils import inject_css
 import pandas as pd
 import plotly.express as px
 import os
 from datetime import datetime, timedelta, timezone
 
 st.set_page_config(page_title="EcoSort AI - Analytics", page_icon="📊", layout="wide")
+inject_css()
 
 from auth_utils import check_auth, get_current_user
 from database import Repository

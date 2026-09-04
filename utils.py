@@ -5,6 +5,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BASE_DIR = Path(__file__).resolve().parents[0]  # ecosort/ root
 
+import streamlit as st
+
+def inject_css():
+    """Inject global CSS styles from style.css into the Streamlit app."""
+    try:
+        with open("style.css") as f:
+            st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
+    except Exception as e:
+        logger.error(f"Failed to load CSS: {e}")
+
 class Settings(BaseSettings):
     APP_NAME: str = "EcoSort AI"
     MONGO_URI: str = "mongodb://localhost:27017" # Default fallback

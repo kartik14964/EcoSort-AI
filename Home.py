@@ -1,9 +1,11 @@
 import streamlit as st
+from utils import inject_css
 import os
 from datetime import datetime
 
 # ✅ Must be absolute first Streamlit call
 st.set_page_config(
+inject_css()
     page_title="EcoSort AI - Home",
     page_icon="E",
     layout="wide",

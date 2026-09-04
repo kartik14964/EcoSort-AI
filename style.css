@@ -4,8 +4,22 @@
 #MainMenu { visibility: hidden; }
 footer { visibility: hidden; }
 .stDeployButton { display: none; }
-[data-testid="stHeader"] { background: transparent !important; }
-
+/* Make the sidebar nav bar completely dark */
+[data-testid="stSidebar"] {
+    background-color: #0f1c16 !important;
+}
+[data-testid="stSidebar"] * {
+    color: #e2e8f0 !important;
+}
+[data-testid="stSidebar"] div[data-baseweb="select"] *,
+[data-testid="stSidebar"] div[data-baseweb="base-input"] *,
+[data-testid="stSidebar"] input {
+    color: #103b27 !important;
+}
+[data-testid="stSidebar"] button {
+    background-color: #1a2e24 !important;
+    border-color: #2a4738 !important;
+}
 /* Custom Component: Cards */
 .pro-card {
   background: #ffffff;

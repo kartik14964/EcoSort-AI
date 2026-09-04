@@ -4,11 +4,12 @@ import base64
 
 # ✅ Must be first Streamlit call
 st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
+inject_css()
 
 from auth_utils import check_auth, get_current_user
 from database import Repository
 from ai_services import detector_service, RecommendationEngine
-from utils import settings
+from utils import settings, inject_css
 import cv2
 import numpy as np
 

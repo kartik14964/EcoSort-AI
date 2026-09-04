@@ -1,9 +1,11 @@
 import streamlit as st
+from utils import inject_css
 from ai_services import AIAssistantService
 from auth_utils import check_auth, get_current_user
 
 # ✅ Must be first Streamlit call
 st.set_page_config(page_title="EcoSort AI - Assistant", page_icon="🤖", layout="wide")
+inject_css()
 
 check_auth()
 

@@ -1,9 +1,11 @@
 import streamlit as st
+from utils import inject_css
 import pandas as pd
 from auth_utils import check_auth, get_current_user
 from database import Repository
 
 st.set_page_config(page_title="EcoSort AI - History", page_icon="📜", layout="wide")
+inject_css()
 check_auth()
 
 st.title("📜 Detection History")
