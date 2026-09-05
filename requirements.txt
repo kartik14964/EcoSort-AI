@@ -11,3 +11,4 @@ python-dotenv>=1.0.0
 pydantic-settings
 streamlit-option-menu
 reportlab
+extra-streamlit-components==0.1.81
