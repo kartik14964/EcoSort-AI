@@ -5,7 +5,7 @@ import plotly.express as px
 import os
 from datetime import datetime, timedelta, timezone
 
-st.set_page_config(page_title="EcoSort AI - Analytics", page_icon="📊", layout="wide")
+st.set_page_config(page_title="EcoSort AI - Analytics", page_icon="📊", layout="wide", initial_sidebar_state="expanded" if st.session_state.get("authenticated", False) else "collapsed")
 inject_css()
 
 from auth_utils import check_auth, render_sidebar_footer, get_current_user

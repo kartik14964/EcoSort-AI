@@ -4,7 +4,7 @@ from ai_services import AIAssistantService
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
 
 # ✅ Must be first Streamlit call
-st.set_page_config(page_title="EcoSort AI - Assistant", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="EcoSort AI - Assistant", page_icon="🤖", layout="wide", initial_sidebar_state="expanded" if st.session_state.get("authenticated", False) else "collapsed")
 inject_css()
 
 check_auth()

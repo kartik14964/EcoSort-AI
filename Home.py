@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="EcoSort AI - Home",
     page_icon="E",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded" if st.session_state.get("authenticated", False) else "collapsed"
 )
 inject_css()
 

@@ -4,7 +4,7 @@ import pandas as pd
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository
 
-st.set_page_config(page_title="EcoSort AI - History", page_icon="📜", layout="wide")
+st.set_page_config(page_title="EcoSort AI - History", page_icon="📜", layout="wide", initial_sidebar_state="expanded" if st.session_state.get("authenticated", False) else "collapsed")
 inject_css()
 check_auth()
 

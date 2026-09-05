@@ -4,7 +4,7 @@ import os
 import base64
 
 # ✅ Must be first Streamlit call
-st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
+st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide", initial_sidebar_state="expanded" if st.session_state.get("authenticated", False) else "collapsed")
 inject_css()
 
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
