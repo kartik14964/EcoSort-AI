@@ -5,8 +5,8 @@ import base64
 import numpy as np
 import onnxruntime as ort
 import threading
-from utils import settings
-from utils import setup_logger
+from app_utils import settings
+from app_utils import setup_logger
 import gc
 
 logger = setup_logger("detector_service")

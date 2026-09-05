@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import inject_css
+from app_utils import inject_css
 import pandas as pd
 import plotly.express as px
 import os

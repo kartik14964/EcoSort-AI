@@ -2,8 +2,8 @@ import time
 import pymongo
 from pymongo.errors import ConnectionFailure, ServerSelectionTimeoutError
 import certifi
-from utils import settings
-from utils import setup_logger
+from app_utils import settings
+from app_utils import setup_logger
 
 logger = setup_logger("database_connection")
 
@@ -99,8 +99,8 @@ from datetime import datetime, timedelta
 from typing import Optional
 from bson import ObjectId
 from database import db_conn
-from utils import settings
-from utils import setup_logger
+from app_utils import settings
+from app_utils import setup_logger
 
 logger = setup_logger("database_repository")
 

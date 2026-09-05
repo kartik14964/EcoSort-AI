@@ -175,4 +175,4 @@ def get_current_user():
 
 def logout():
     st.session_state.clear()
-    st.rerun()
+    st.switch_page("Home.py")

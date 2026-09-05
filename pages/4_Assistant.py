@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import inject_css
+from app_utils import inject_css
 from ai_services import AIAssistantService
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
 

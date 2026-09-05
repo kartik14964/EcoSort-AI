@@ -81,7 +81,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfgen import canvas
-from utils import settings
+from app_utils import settings
 
 class NumberedCanvas(canvas.Canvas):
     """Canvas that computes total pages dynamically for footer page numbers."""

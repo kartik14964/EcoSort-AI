@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import inject_css
+from app_utils import inject_css
 import pandas as pd
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository

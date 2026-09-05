@@ -1,8 +1,8 @@
 import streamlit as st
-from utils import inject_css
+from app_utils import inject_css
 from auth_utils import check_auth, render_sidebar_footer
 from database import Repository
-from utils import settings
+from app_utils import settings
 
 st.set_page_config(page_title="EcoSort AI - Settings", page_icon="⚙️", layout="wide")
 inject_css()

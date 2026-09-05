@@ -1,5 +1,5 @@
 import streamlit as st
-from utils import inject_css
+from app_utils import inject_css
 import os
 import base64
 
@@ -10,7 +10,7 @@ inject_css()
 from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository
 from ai_services import detector_service, RecommendationEngine
-from utils import settings
+from app_utils import settings
 import cv2
 import numpy as np
 
