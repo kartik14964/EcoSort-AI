@@ -94,9 +94,18 @@ st.sidebar.subheader("Detection Controls")
 
 try:
     settings_doc = Repository.get_settings()
-    saved_threshold = float(settings_doc.get("detection_threshold", 0.25))
+    db_threshold = float(settings_doc.get("detection_threshold", 0.25))
 except Exception:
-    saved_threshold = 0.25
+    db_threshold = 0.25
+
+saved_threshold = st.sidebar.slider(
+    "Confidence Threshold", 
+    min_value=0.01, 
+    max_value=0.99, 
+    value=db_threshold, 
+    step=0.05, 
+    help="Lower this if the local AI model is missing objects."
+)
 
 st.sidebar.subheader("AI Processing Mode")
 processing_mode = st.sidebar.radio(

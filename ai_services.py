@@ -54,16 +54,10 @@ class GroqClassifier:
     - Shoes = footwear
     - Trash = non-recyclable or ambiguous items (styrofoam, ceramics, mixed materials)
 
-    Think step-by-step about what the object is, its material, and which category it belongs to.
-    Write your thought process inside <think>...</think> tags.
-    After thinking, respond with ONLY a JSON object on the final line.
-    
-    Example:
-    <think>
-    The image shows a crumpled plastic water bottle. It is made of clear PET plastic. Therefore, the category is Plastic.
-    </think>
-    {"category": "Plastic", "confidence": 0.95}"""
-
+    DO NOT output any <think> tags or reasoning.
+    Respond with ONLY a JSON object on the final line containing 'category' (string) and 'confidence' (float between 0 and 1)."""
+            
+            # Request completion from Groq API
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[{
@@ -73,8 +67,8 @@ class GroqClassifier:
                         {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{image_b64}"}}
                     ]
                 }],
-                temperature=0,
-                max_tokens=2048,
+                max_tokens=800,
+                temperature=0.1
             )
 
             text = response.choices[0].message.content.strip()

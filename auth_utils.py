@@ -15,11 +15,11 @@ def hash_password(password: str) -> str:
 
 def show_login_form():
     st.markdown("""
+    <div id="login-lock"></div>
     <style>
-    /* 1. Hide the sidebar completely for unauthenticated users */
-    [data-testid="stSidebar"] { display: none !important; }
-    [data-testid="collapsedControl"] { display: none !important; }
-    
+    /* 1. Hide the sidebar completely for unauthenticated users using DOM-aware selector */
+    div[data-testid="stAppViewContainer"]:has(#login-lock) [data-testid="stSidebar"] { display: none !important; }
+    div[data-testid="stAppViewContainer"]:has(#login-lock) [data-testid="collapsedControl"] { display: none !important; }
     /* 2. Premium Animated Background just for Login */
     .stApp {
         background: 
@@ -28,12 +28,10 @@ def show_login_form():
             linear-gradient(135deg, #eefaf1 0%, #fbfefc 100%) !important;
         background-attachment: fixed !important;
     }
-    
     /* 3. Push content down slightly for vertical centering */
     .block-container {
         padding-top: 10vh !important;
     }
-    
     /* 4. Glassmorphism styling specifically targeting the login form container */
     div[data-testid="stForm"] {
         background: rgba(255, 255, 255, 0.6) !important;
@@ -50,7 +48,6 @@ def show_login_form():
         transform: translateY(-4px) !important;
         box-shadow: 0 30px 60px rgba(16, 42, 31, 0.12) !important;
     }
-
     /* Target the text inputs specifically inside the login form to look premium */
     div[data-testid="stForm"] input {
         background: rgba(255, 255, 255, 0.9) !important;
@@ -64,7 +61,6 @@ def show_login_form():
         border-color: #1f9b62 !important;
         box-shadow: 0 0 0 4px rgba(31, 155, 98, 0.15) !important;
     }
-    
     /* Style the main primary button */
     div[data-testid="stForm"] button[kind="primaryFormSubmit"] {
         background: linear-gradient(135deg, #178a55 0%, #126b44 100%) !important;
@@ -83,8 +79,6 @@ def show_login_form():
         transform: translateY(-2px) !important;
         box-shadow: 0 15px 30px rgba(18, 107, 68, 0.35) !important;
     }
-    
-    /* Registration Expander Styling (Removed, replaced by Tabs) */
     /* Style Streamlit Tabs to look premium */
     div[data-testid="stTabs"] button {
         font-size: 1.1rem !important;
@@ -99,9 +93,7 @@ def show_login_form():
         color: #1f9b62 !important;
         border-bottom: 2px solid #1f9b62 !important;
     }
-    </style>
-    
-    <div style='text-align: center; margin-bottom: 2rem;'>
+    </style>    <div style='text-align: center; margin-bottom: 2rem;'>
         <div style="font-size: 4rem; line-height: 1; margin-bottom: 12px; filter: drop-shadow(0 10px 15px rgba(31,155,98,0.3)); animation: float 6s ease-in-out infinite;">♻️</div>
         <h1 style='color: #103b27; font-weight: 800; font-size: 2.8rem; letter-spacing: -1.5px; margin-bottom: 8px;'>EcoSort AI</h1>
         <p style='color: #5f7868; font-size: 1.1rem; font-weight: 500;'>Intelligent waste tracking & sustainability analytics</p>
@@ -175,4 +167,4 @@ def get_current_user():
 
 def logout():
     st.session_state.clear()
-    st.switch_page("Home.py")
+    st.rerun()

@@ -143,38 +143,7 @@ footer { visibility: hidden; }
   max-width: 1100px;
 }
 
-/* =========================================
-   Hide Streamlit Default Chrome & Buttons
-   ========================================= */
-
-/* Hide the top header (Share, GitHub, Edit, Star, hamburger menu) */
-header[data-testid="stHeader"] {
-    display: none !important;
-    visibility: hidden !important;
-}
-
-/* Hide the bottom 'Made with Streamlit' footer */
-footer {
-    display: none !important;
-}
-
-/* Hide the 'Deploy' / 'Manage App' button */
-[data-testid="stDeployButton"], 
-.viewerBadge_container__1QSob,
-.viewerBadge_link__1S137,
-#st-deploy-button {
-    display: none !important;
-}
-
-/* Remove extra padding at the top since header is gone */
-.block-container {
-    padding-top: 2rem !important;
-}
-/* Aggressive overrides for newer Streamlit Cloud versions */
-[data-testid="stToolbar"] {
-    display: none !important;
-    visibility: hidden !important;
-}
+/* Removed aggressive stHeader and stToolbar overrides because Streamlit's config.toml toolbarMode="viewer" natively handles this much cleaner without breaking the sidebar toggle arrow! */
 .stAppDeployButton {
     display: none !important;
 }
