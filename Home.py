@@ -12,7 +12,7 @@ st.set_page_config(
 )
 inject_css()
 
-from auth_utils import check_auth, get_current_user, logout
+from auth_utils import check_auth, render_sidebar_footer, get_current_user, logout
 from database import Repository
 
 # ✅ Auth check — redirects to React if no token
@@ -29,14 +29,8 @@ def load_css():
 
 load_css()
 
-# Sidebar
-if st.sidebar.button("Logout"):
-    logout()
-st.sidebar.markdown("---")
-st.sidebar.markdown(
-    "<p style='text-align: center; color: #6b7280; font-size: 0.8rem;'>EcoSort AI © 2026</p>",
-    unsafe_allow_html=True
-)
+# Universal Sidebar (Logout button & footer) is now automatically injected by check_auth()
+
 
 def get_dashboard_summary():
     try:
@@ -161,3 +155,7 @@ with right_col:
             """, unsafe_allow_html=True)
     else:
         st.write("No scan events logged today.")
+
+
+# Render the universal sidebar footer (Logout) at the very bottom
+render_sidebar_footer()

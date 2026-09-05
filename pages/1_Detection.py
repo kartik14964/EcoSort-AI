@@ -7,7 +7,7 @@ import base64
 st.set_page_config(page_title="EcoSort AI - Waste Detection", page_icon="📷", layout="wide")
 inject_css()
 
-from auth_utils import check_auth, get_current_user
+from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository
 from ai_services import detector_service, RecommendationEngine
 from utils import settings
@@ -204,3 +204,7 @@ elif mode == "Webcam Snap":
             if detections:
                 with col1:
                     save_to_db(detections, key="save_webcam")
+
+
+# Render the universal sidebar footer (Logout) at the very bottom
+render_sidebar_footer()

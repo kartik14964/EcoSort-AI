@@ -1,7 +1,7 @@
 import streamlit as st
 from utils import inject_css
 import pandas as pd
-from auth_utils import check_auth, get_current_user
+from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository
 
 st.set_page_config(page_title="EcoSort AI - History", page_icon="📜", layout="wide")
@@ -32,3 +32,7 @@ try:
         st.info("No history found. Try scanning some items first!")
 except Exception as e:
     st.error(f"Failed to load history: {e}")
+
+
+# Render the universal sidebar footer (Logout) at the very bottom
+render_sidebar_footer()

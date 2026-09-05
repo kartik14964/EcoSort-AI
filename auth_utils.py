@@ -54,7 +54,7 @@ def show_login_form():
     /* Target the text inputs specifically inside the login form to look premium */
     div[data-testid="stForm"] input {
         background: rgba(255, 255, 255, 0.9) !important;
-        border: 1px solid #dceee2 !important;
+        border: 2px solid #1f9b62 !important;
         padding: 14px 16px !important;
         border-radius: 12px !important;
         font-size: 1rem !important;
@@ -84,17 +84,20 @@ def show_login_form():
         box-shadow: 0 15px 30px rgba(18, 107, 68, 0.35) !important;
     }
     
-    /* Registration Expander Styling */
-    div[data-testid="stExpander"] {
+    /* Registration Expander Styling (Removed, replaced by Tabs) */
+    /* Style Streamlit Tabs to look premium */
+    div[data-testid="stTabs"] button {
+        font-size: 1.1rem !important;
+        font-weight: 600 !important;
+        color: #5f7868 !important;
+        padding-bottom: 10px !important;
+        background-color: transparent !important;
         border: none !important;
-        background: transparent !important;
-        box-shadow: none !important;
-        margin-top: 20px !important;
+        border-bottom: 2px solid transparent !important;
     }
-    div[data-testid="stExpander"] > details {
-        border: 1px dashed rgba(31, 155, 98, 0.4) !important;
-        border-radius: 16px !important;
-        background: rgba(255, 255, 255, 0.4) !important;
+    div[data-testid="stTabs"] button[aria-selected="true"] {
+        color: #1f9b62 !important;
+        border-bottom: 2px solid #1f9b62 !important;
     }
     </style>
     
@@ -107,34 +110,34 @@ def show_login_form():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit_button = st.form_submit_button("Login", use_container_width=True)
-            
-            if submit_button:
-                if not username or not password:
-                    st.error("Please enter both username and password")
-                    return
+        tab1, tab2 = st.tabs(["🔐 Login", "✨ Create Account"])
+        
+        with tab1:
+            with st.form("login_form"):
+                username = st.text_input("Username", autocomplete="username")
+                password = st.text_input("Password", type="password", autocomplete="current-password")
+                submit_button = st.form_submit_button("Login", type="primary", use_container_width=True)
                 
-                try:
-                    user_data = Repository.get_user_by_username(username)
-                except RuntimeError as e:
-                    st.error(f"Database error: {e}")
-                    return
-                
-                if user_data and verify_password(password, user_data.get("hashed_password", "")):
-                    st.session_state.authenticated = True
-                    st.session_state.username = username
-                    st.rerun()
-                else:
-                    st.error("Incorrect username or password")
+                if submit_button:
+                    if not username or not password:
+                        st.error("Please enter both username and password")
+                    else:
+                        try:
+                            user_data = Repository.get_user_by_username(username)
+                            if user_data and verify_password(password, user_data.get("hashed_password", "")):
+                                st.session_state.authenticated = True
+                                st.session_state.username = username
+                                st.rerun()
+                            else:
+                                st.error("Incorrect username or password")
+                        except RuntimeError as e:
+                            st.error(f"Database error: {e}")
 
-        with st.expander("Register New User"):
+        with tab2:
             with st.form("register_form"):
-                new_username = st.text_input("New Username")
-                new_password = st.text_input("New Password", type="password")
-                register_button = st.form_submit_button("Register", use_container_width=True)
+                new_username = st.text_input("Choose a Username", autocomplete="new-password")
+                new_password = st.text_input("Choose a Password", type="password", autocomplete="new-password")
+                register_button = st.form_submit_button("Register Account", type="primary", use_container_width=True)
                 
                 if register_button:
                     if not new_username or not new_password:
@@ -156,6 +159,16 @@ def check_auth():
         show_login_form()
         st.stop()
     return True
+
+def render_sidebar_footer():
+    # Universal Sidebar Elements for Authenticated Users
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Logout", use_container_width=True):
+        logout()
+    st.sidebar.markdown(
+        "<p style='text-align: center; color: #6b7280; font-size: 0.8rem; margin-top: 20px;'>EcoSort AI © 2026</p>",
+        unsafe_allow_html=True
+    )
 
 def get_current_user():
     return st.session_state.get("username", "anonymous")

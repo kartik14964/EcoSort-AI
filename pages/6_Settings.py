@@ -1,6 +1,6 @@
 import streamlit as st
 from utils import inject_css
-from auth_utils import check_auth
+from auth_utils import check_auth, render_sidebar_footer
 from database import Repository
 from utils import settings
 
@@ -43,3 +43,7 @@ if st.button("💾 Save All Settings"):
         st.success("Settings saved successfully!")
     except Exception as e:
         st.error(f"Failed to save settings: {e}")
+
+
+# Render the universal sidebar footer (Logout) at the very bottom
+render_sidebar_footer()

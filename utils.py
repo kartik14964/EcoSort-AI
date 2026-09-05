@@ -13,7 +13,7 @@ def inject_css():
         with open("style.css") as f:
             st.markdown(f'<style>{f.read()}</style>', unsafe_allow_html=True)
     except Exception as e:
-        logger.error(f"Failed to load CSS: {e}")
+        print(f"Failed to load CSS: {e}")
 
 class Settings(BaseSettings):
     APP_NAME: str = "EcoSort AI"

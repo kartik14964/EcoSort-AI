@@ -1,7 +1,7 @@
 import streamlit as st
 from utils import inject_css
 import pandas as pd
-from auth_utils import check_auth, get_current_user
+from auth_utils import check_auth, render_sidebar_footer, get_current_user
 from database import Repository
 from datetime import datetime
 
@@ -34,3 +34,7 @@ if st.button("Generate CSV Report"):
             st.warning("No data available to generate a report.")
     except Exception as e:
         st.error(f"Failed to generate report: {e}")
+
+
+# Render the universal sidebar footer (Logout) at the very bottom
+render_sidebar_footer()

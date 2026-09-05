@@ -355,79 +355,60 @@ from datetime import datetime, timedelta
 from database import Repository
 
 class AIAssistantService:
-    @staticmethod
-    def answer_query(message: str) -> str:
-        msg = message.lower()
+    def __init__(self):
+        try:
+            from groq import Groq
+            self.client = Groq(api_key=settings.GROQ_API_KEY)
+            self.model_name = "groq/compound-mini"
+            self.available = True
+        except Exception as e:
+            logger.warning(f"Groq not available for chat: {e}")
+            self.available = False
+
+    def answer_query(self, messages: list) -> str:
+        if not self.available:
+            return "I'm currently running in offline mode and cannot process complex queries. Please configure a Groq API key to activate my AI."
+
+        # 1. Fetch user context
         start_date = datetime.utcnow() - timedelta(days=30)
         detections = Repository.get_detections(filters={"start_date": start_date}, limit=1000)
-
+        
+        system_prompt = "You are the EcoSort AI Sustainability Assistant. You help users understand their waste sorting habits, carbon footprint, and provide general recycling advice.\n\n"
+        
         if not detections:
-            return "I don't see any recorded detections in the database yet. Start scanning items on the Detection page so I can analyze the sustainability footprint!"
+            system_prompt += "The user has not scanned any items yet. Encourage them to use the Detection tab to start tracking their waste."
+        else:
+            df = pd.DataFrame(detections)
+            total_items = len(df)
+            recyclable_items = df[df['category'].isin(["Plastic", "Paper", "Metal", "Brown-glass", "Green-glass", "White-glass", "Cardboard"])]
+            rec_rate = (len(recyclable_items) / total_items * 100) if total_items > 0 else 0
+            total_co2 = df['carbon_saved_kg'].sum()
+            top_cat = df['category'].value_counts().idxmax()
+            
+            system_prompt += f"Here is the user's 30-day statistics:\n"
+            system_prompt += f"- Total items scanned: {total_items}\n"
+            system_prompt += f"- Total CO2 saved: {total_co2:.2f} kg\n"
+            system_prompt += f"- Recycling rate: {rec_rate:.1f}%\n"
+            system_prompt += f"- Most common waste: {top_cat}\n\n"
+            system_prompt += "Use these statistics to give personalized answers if the user asks about their own data. Be friendly, concise, and professional."
 
-        df = pd.DataFrame(detections)
-        df['timestamp'] = pd.to_datetime(df['timestamp'])
-        total_items = len(df)
-        recyclable_items = df[df['category'].isin(["Plastic", "Paper", "Metal", "Brown-glass", "Green-glass", "White-glass", "Cardboard"])]
-        rec_rate = (len(recyclable_items) / total_items * 100) if total_items > 0 else 0
-        total_co2 = df['carbon_saved_kg'].sum()
-
-        if "co2" in msg or "carbon" in msg or "greenhouse" in msg:
-            return (f"We have prevented approximately **{total_co2:.2f} kg of CO₂ emissions** from entering the atmosphere over the last 30 days. This was achieved by sorting and recycling {len(recyclable_items)} items. That is equivalent to carbon sequestered by roughly {total_co2 * 0.0165:.2f} trees growing for a decade!")
-
-        if "recycling rate" in msg or "recyclability" in msg or "percent recyclable" in msg:
-            return (f"The overall recycling rate is currently **{rec_rate:.1f}%**. Out of {total_items} total detected items, {len(recyclable_items)} fall into highly recyclable categories (Plastic, Paper, Metal, Glass). Our target is to exceed 80% through better segregation!")
-
-        for category in ["plastic", "paper", "metal", "brown-glass", "green-glass", "white-glass", "biological", "battery", "cardboard", "clothes", "shoes", "trash"]:
-            if category in msg:
-                cat_df = df[df['category'].str.lower() == category]
-                cat_count = len(cat_df)
-                cat_pct = (cat_count / total_items * 100) if total_items > 0 else 0
-                cat_co2 = cat_df['carbon_saved_kg'].sum()
-                time_str = "in the last 30 days"
-                if "week" in msg:
-                    one_week_ago = datetime.utcnow() - timedelta(days=7)
-                    cat_week_df = cat_df[cat_df['timestamp'] >= one_week_ago]
-                    cat_count = len(cat_week_df)
-                    time_str = "this past week"
-                    cat_co2 = cat_week_df['carbon_saved_kg'].sum()
-                elif "today" in msg or "day" in msg and not "days" in msg:
-                    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-                    cat_day_df = cat_df[cat_df['timestamp'] >= today_start]
-                    cat_count = len(cat_day_df)
-                    time_str = "today"
-                    cat_co2 = cat_day_df['carbon_saved_kg'].sum()
-                return (f"A total of **{cat_count} {category} items** were detected {time_str}. This represents **{cat_pct:.1f}%** of all waste tracked. Sorting these {category} items saved **{cat_co2:.2f} kg of CO₂**.")
-
-        if "increasing" in msg or "trend" in msg or "growth" in msg or "rising" in msg:
-            two_weeks_ago = datetime.utcnow() - timedelta(days=14)
-            four_weeks_ago = datetime.utcnow() - timedelta(days=28)
-            recent_df = df[df['timestamp'] >= two_weeks_ago]
-            older_df = df[(df['timestamp'] >= four_weeks_ago) & (df['timestamp'] < two_weeks_ago)]
-            recent_counts = recent_df['category'].value_counts()
-            older_counts = older_df['category'].value_counts()
-            trends = {}
-            for cat in df['category'].unique():
-                r_val = recent_counts.get(cat, 0)
-                o_val = older_counts.get(cat, 0)
-                if o_val > 0:
-                    growth = ((r_val - o_val) / o_val) * 100
-                else:
-                    growth = 100.0 if r_val > 0 else 0
-                trends[cat] = growth
-            if trends:
-                fastest_growing = max(trends, key=trends.get)
-                growth_rate = trends[fastest_growing]
-                if growth_rate > 0:
-                    return (f"Analyzing trends from the last 2 weeks, **{fastest_growing}** waste is increasing fastest, showing a **+{growth_rate:.1f}% growth** compared to the preceding weeks.")
-                else:
-                    top_category = df['category'].value_counts().idxmax()
-                    return (f"Waste levels have generally stabilized or decreased. However, **{top_category}** remains our highest volume category, representing {df['category'].value_counts().max() / total_items * 100:.1f}% of total waste.")
-
-        if "hello" in msg or "hi " in msg or "hey" in msg or "help" in msg:
-            return ("Hello! I am your EcoSort Sustainability Assistant. I can answer questions about our waste stats, carbon offsets, and trends. Try asking me:\n- *'How much plastic was detected this week?'*\n- *'What is our current recycling rate?'*\n- *'How much CO₂ did we save?'*\n- *'Which waste category is increasing?'*")
-
-        top_cat = df['category'].value_counts().idxmax()
-        return (f"Over the last 30 days, we've logged **{total_items} items** across our platform. The dominant waste category detected is **{top_cat}** ({df['category'].value_counts().max()} items). Our recycling rate stands at **{rec_rate:.1f}%**, saving **{total_co2:.2f} kg of CO₂** in total.")
+        # 2. Build messages payload
+        api_messages = [{"role": "system", "content": system_prompt}]
+        for msg in messages:
+            api_messages.append({"role": msg["role"], "content": msg["content"]})
+            
+        # 3. Call Groq
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=api_messages,
+                temperature=0.7,
+                max_tokens=800,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"Groq chat failed: {e}")
+            return f"I encountered an error trying to process your request: {str(e)}"
 
 
 class RecommendationEngine:
