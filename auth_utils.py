@@ -152,25 +152,19 @@ def show_login_form(cm):
                             })
                             st.success("Registered successfully! You can now login.")
 
-
-
-def render_sidebar_footer():
-    # Universal Sidebar Elements for Authenticated Users
-    st.sidebar.markdown("---")
-    if st.sidebar.button("Logout", use_container_width=True):
-        logout()
-    st.sidebar.markdown(
-        "<p style='text-align: center; color: #6b7280; font-size: 0.8rem; margin-top: 20px;'>EcoSort AI © 2026</p>",
-        unsafe_allow_html=True
-    )
-
-def get_current_user():
-    return st.session_state.get("username", "anonymous")
-
-
 def check_auth():
     cm = stx.CookieManager(key="my_cookies")
     st.session_state["cookie_manager"] = cm
+    
+    
+    if st.session_state.get("logout_requested", False):
+        st.session_state.logout_requested = False
+        try:
+            cm.delete("ecosort_user")
+        except KeyError:
+            pass
+        show_login_form(cm)
+        st.stop()
     
     if st.session_state.get("authenticated", False):
         return True
@@ -184,13 +178,20 @@ def check_auth():
     show_login_form(cm)
     st.stop()
 
+def render_sidebar_footer():
+    # Universal Sidebar Elements for Authenticated Users
+    st.sidebar.markdown("---")
+    st.sidebar.button("Logout", use_container_width=True, on_click=logout)
+    st.sidebar.markdown(
+        "<p style='text-align: center; color: #6b7280; font-size: 0.8rem; margin-top: 20px;'>EcoSort AI © 2026</p>",
+        unsafe_allow_html=True
+    )
+
+def get_current_user():
+    return st.session_state.get("username", "anonymous")
+
 def logout():
-    cm = st.session_state.get("cookie_manager")
-    st.session_state.clear()
-    if cm:
-        try:
-            cm.delete("ecosort_user")
-            time.sleep(0.5)
-        except KeyError:
-            pass
+    st.session_state.authenticated = False
+    st.session_state.username = None
+    st.session_state.logout_requested = True
     st.rerun()
