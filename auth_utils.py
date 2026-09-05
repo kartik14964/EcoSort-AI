@@ -175,20 +175,6 @@ def check_auth():
         st.session_state.username = saved_user
         return True
         
-    # CookieManager takes 1 extra render cycle to fetch cookies from the browser.
-    # If we show the login form immediately on a hard refresh, it looks like they are logged out.
-    # So we wait one cycle.
-    if not st.session_state.get("cookies_initialized", False):
-        st.session_state.cookies_initialized = True
-        st.markdown(
-            "<div style='text-align: center; margin-top: 20vh; color: #1f9b62;'>"
-            "<div style='font-size: 3rem; animation: float 3s ease-in-out infinite;'>♻️</div>"
-            "<h3>Restoring session...</h3>"
-            "</div>", 
-            unsafe_allow_html=True
-        )
-        st.stop()
-        
     show_login_form(cm)
     st.stop()
 
