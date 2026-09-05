@@ -170,3 +170,15 @@ footer {
 .block-container {
     padding-top: 2rem !important;
 }
+/* Aggressive overrides for newer Streamlit Cloud versions */
+[data-testid="stToolbar"] {
+    display: none !important;
+    visibility: hidden !important;
+}
+.stAppDeployButton {
+    display: none !important;
+}
+/* Specifically target the GitHub ribbon/button */
+a[href*="github.com"] {
+    display: none !important;
+}

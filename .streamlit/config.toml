@@ -1,11 +1,7 @@
+[client]
+toolbarMode = "viewer"
+showErrorDetails = false
+
 [theme]
 base = "light"
 primaryColor = "#1f9b62"
-backgroundColor = "#fbfefc"
-secondaryBackgroundColor = "#eefaf1"
-textColor = "#103b27"
-font = "sans serif"
-
-[client]
-toolbarMode = "minimal"
-showErrorDetails = false
