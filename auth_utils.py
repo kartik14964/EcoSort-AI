@@ -5,9 +5,6 @@ import time
 from database import Repository
 import extra_streamlit_components as stx
 
-@st.cache_resource
-def get_manager():
-    return stx.CookieManager(key="cookie_manager")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
@@ -157,7 +154,8 @@ def show_login_form(cm):
                             st.success("Registered successfully! You can now login.")
 
 def check_auth():
-    cm = get_manager()
+    cm = stx.CookieManager(key="my_cookies")
+    st.session_state["cookie_manager"] = cm
     
     if st.session_state.get("authenticated", False):
         return True
@@ -172,7 +170,6 @@ def check_auth():
     st.stop()
 
 def render_sidebar_footer():
-    # Universal Sidebar Elements for Authenticated Users
     st.sidebar.markdown("---")
     if st.sidebar.button("Logout", use_container_width=True):
         logout()
@@ -185,8 +182,9 @@ def get_current_user():
     return st.session_state.get("username", "anonymous")
 
 def logout():
-    cm = get_manager()
+    cm = st.session_state.get("cookie_manager")
     st.session_state.clear()
-    cm.delete("ecosort_user")
-    time.sleep(0.5)
+    if cm:
+        cm.delete("ecosort_user")
+        time.sleep(0.5)
     st.rerun()
