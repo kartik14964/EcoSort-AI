@@ -111,6 +111,7 @@ st.sidebar.subheader("AI Processing Mode")
 processing_mode = st.sidebar.radio(
     "Select Mode", 
     ["🧠 Smart Mode (Advanced AI)", "⚡ Fast Mode (Local AI)"],
+    index=1,
     help="Smart Mode uses advanced AI for maximum accuracy (Recommended). Fast Mode runs locally but only recognizes 12 basic categories."
 )
 force_ai = "Smart Mode" in processing_mode
@@ -157,6 +158,13 @@ if mode == "Image Upload":
                 st.subheader("Annotated Frame")
                 img_data = base64.b64decode(res_data["annotated_image_b64"])
                 st.image(img_data, width="stretch")
+                st.download_button(
+                    label="Download Annotated Image",
+                    data=img_data,
+                    file_name="annotated_image.jpg",
+                    mime="image/jpeg",
+                    use_container_width=True
+                )
             with col2:
                 st.subheader("Classification & Recommendations")
                 detections = filter_by_confidence(res_data.get("detections", []), saved_threshold)
@@ -205,6 +213,13 @@ elif mode == "Webcam Snap":
                 st.subheader("Annotated Capture")
                 img_data = base64.b64decode(res_data["annotated_image_b64"])
                 st.image(img_data, width="stretch")
+                st.download_button(
+                    label="Download Annotated Capture",
+                    data=img_data,
+                    file_name="annotated_capture.jpg",
+                    mime="image/jpeg",
+                    use_container_width=True
+                )
             with col2:
                 st.subheader("Classification & Recommendations")
                 detections = filter_by_confidence(res_data.get("detections", []), saved_threshold)
