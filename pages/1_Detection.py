@@ -100,8 +100,8 @@ except Exception:
 
 saved_threshold = st.sidebar.slider(
     "Confidence Threshold", 
-    min_value=0.01, 
-    max_value=0.99, 
+    min_value=0.05, 
+    max_value=1.00, 
     value=db_threshold, 
     step=0.05, 
     help="Lower this if the local AI model is missing objects."
