@@ -1,6 +1,9 @@
 import streamlit as st
 import bcrypt
+import datetime
+import time
 from database import Repository
+import extra_streamlit_components as stx
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
@@ -13,7 +16,7 @@ def hash_password(password: str) -> str:
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
-def show_login_form():
+def show_login_form(cm):
     st.markdown("""
     <div id="login-lock"></div>
     <style>
@@ -119,6 +122,9 @@ def show_login_form():
                             if user_data and verify_password(password, user_data.get("hashed_password", "")):
                                 st.session_state.authenticated = True
                                 st.session_state.username = username
+                                cm.set("ecosort_user", username, expires_at=datetime.datetime.now() + datetime.timedelta(days=30))
+                                st.success("Logged in successfully! Redirecting...")
+                                time.sleep(0.5)
                                 st.rerun()
                             else:
                                 st.error("Incorrect username or password")
@@ -146,11 +152,7 @@ def show_login_form():
                             })
                             st.success("Registered successfully! You can now login.")
 
-def check_auth():
-    if not st.session_state.get("authenticated", False):
-        show_login_form()
-        st.stop()
-    return True
+
 
 def render_sidebar_footer():
     # Universal Sidebar Elements for Authenticated Users
@@ -165,6 +167,30 @@ def render_sidebar_footer():
 def get_current_user():
     return st.session_state.get("username", "anonymous")
 
+
+def check_auth():
+    cm = stx.CookieManager(key="my_cookies")
+    st.session_state["cookie_manager"] = cm
+    
+    if st.session_state.get("authenticated", False):
+        return True
+        
+    saved_user = cm.get(cookie="ecosort_user")
+    if saved_user:
+        st.session_state.authenticated = True
+        st.session_state.username = saved_user
+        return True
+        
+    show_login_form(cm)
+    st.stop()
+
 def logout():
+    cm = st.session_state.get("cookie_manager")
     st.session_state.clear()
+    if cm:
+        try:
+            cm.delete("ecosort_user")
+            time.sleep(0.5)
+        except KeyError:
+            pass
     st.rerun()
